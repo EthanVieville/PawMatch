@@ -6,6 +6,9 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 PET_DATASET_DIR = ROOT_DIR / "dl_models" / "datasets" / "oxford-iiit-pet"
+UTILS_PATH = ROOT_DIR / "dl_models" / "utils"
+COLORS_PT_PATH = UTILS_PATH / "pet_colors.pt"
+OUT_PET_MODELS = UTILS_PATH / "out"
 
 PET_IMAGES_DIR = PET_DATASET_DIR / "images"
 PET_ANNOTATIONS_DIR = PET_DATASET_DIR / "annotations"

@@ -5,3 +5,4 @@ transformers
 torchvision
 matplotlib
 numpy
+tensorboard
