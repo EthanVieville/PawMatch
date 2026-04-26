@@ -10,12 +10,16 @@ Va falloir dockeriser pas mal de trucs:
 
 FRONT  :
 
-cd front
+cd front 
+
 npm install
+
 npm run dev
 
 (ca suppose que node est déjà installé par contre)
 
+
+npm install -D tailwindcss postcss autoprefixer
 
 DL : 
 
