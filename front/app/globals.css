@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+:root {
+  --primary: #10b981;
+  --primary-hover: #059669;
+  --secondary: #AB691B;
+  --secondary-hover:#965E20 ;
+  --bg: #f6f7fb;
+}
+
+body {
+  background: var(--bg);
+}
+
+/* 🔘 BUTTON SYSTEM */
+.btn-primary {
+  @apply text-white px-6 py-3 rounded-xl transition;
+  background-color: var(--primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+.btn-secondary {
+  @apply text-white px-6 py-3 rounded-xl transition;
+  background-color: var(--secondary);
+}
+
+.btn-secondary:hover {
+  background-color: var(--secondary-hover);
+}

@@ -1,7 +1,16 @@
-export default function RootLayout({ children }) {
+import './globals.css';
+import Navbar from '../components/Navbar';
+import { ReactNode } from 'react';
+
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return (
     <html lang="fr">
-      <body style={{ margin: 0, fontFamily: 'Arial, sans-serif' }}>
+      <body className="text-gray-900">
+        <Navbar />
         {children}
       </body>
     </html>
