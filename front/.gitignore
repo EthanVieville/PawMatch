@@ -5,6 +5,10 @@ node_modules/
 .next/
 out/
 dist/
+.vercel/
+
+# typescript cache
+*.tsbuildinfo
 
 # logs
 npm-debug.log*
@@ -19,3 +23,6 @@ pnpm-debug.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# editor
+.vscode/
