@@ -1,88 +1,52 @@
-# scraper/crawler_links.py
+import logging
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
 
+from driver import init_driver
 
-def init_driver():
-    options = Options()
+logger = logging.getLogger(__name__)
 
-    options.add_argument("--headless=new")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    # 🔥 désactiver images + CSS (gros gain)
-    prefs = {
-        "profile.managed_default_content_settings.images": 2,
-        "profile.managed_default_content_settings.stylesheets": 2
-    }
-    options.add_experimental_option("prefs", prefs)
-
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
-
-    driver.set_page_load_timeout(10)
-
-    return driver
+BASE_URL = "https://www.la-spa.fr/adoption/"
 
 
 def get_animal_links(max_pages=5):
     driver = init_driver()
-
     all_links = []
 
-    for page in range(1, max_pages + 1):
-        if page == 1:
-            url = "https://www.la-spa.fr/adoption/"
-        else:
-            url = f"https://www.la-spa.fr/adoption/?page={page}"
+    try:
+        for page in range(1, max_pages + 1):
+            url = BASE_URL if page == 1 else f"{BASE_URL}?page={page}"
+            logger.info("Crawling page %d: %s", page, url)
 
-        print(f"📄 Page {page}")
+            driver.get(url)
 
-        driver.get(url)
+            try:
+                WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/animal/')]"))
+                )
+            except Exception:
+                logger.warning("Page %d: timeout waiting for animal links, stopping pagination", page)
+                break
 
-        # 🔥 ATTENTE INTELLIGENTE (remplace sleep)
-        try:
-            WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/animal/')]"))
-            )
-        except:
-            print("⚠️ Timeout page, on continue")
+            elements = driver.find_elements(By.XPATH, "//a[contains(@href, '/animal/')]")
+            page_links = list({
+                el.get_attribute("href")
+                for el in elements
+                if el.get_attribute("href") and "/animal/" in el.get_attribute("href")
+            })
 
-        elements = driver.find_elements(By.XPATH, "//a[contains(@href, '/animal/')]")
+            if not page_links:
+                logger.info("Page %d: no links found, end of pagination", page)
+                break
 
-        page_links = []
+            logger.info("Page %d: %d links found", page, len(page_links))
+            all_links.extend(page_links)
 
-        for el in elements:
-            href = el.get_attribute("href")
+    finally:
+        driver.quit()
 
-            if href and "/animal/" in href:
-                page_links.append(href)
-
-        page_links = list(set(page_links))
-
-        print(f"👉 {len(page_links)} liens trouvés")
-
-        # 🔥 arrêt automatique si page vide
-        if not page_links:
-            print("🛑 Fin pagination")
-            break
-
-        all_links.extend(page_links)
-
-    driver.quit()
-
-    all_links = list(set(all_links))
-
-    print(f"\n✅ Total: {len(all_links)} fiches uniques")
-
-    return all_links
+    unique_links = list(set(all_links))
+    logger.info("Total: %d unique animal pages", len(unique_links))
+    return unique_links
