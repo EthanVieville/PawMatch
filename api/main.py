@@ -1,12 +1,25 @@
+import logging
 import os
-import json
-from pathlib import Path
+from contextlib import asynccontextmanager
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-app = FastAPI(title="AdoptMe API")
+from database import Animal, get_db, init_db
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="PawMatch API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,56 +28,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DATA_PATH = Path(os.getenv("DATA_PATH", "./data"))
 
-
-def _load_animal(animal_dir: Path, species: str) -> dict:
-    with open(animal_dir / "data.json", encoding="utf-8") as f:
-        data = json.load(f)
-    data["id"] = animal_dir.name
-    data["species"] = species
-    images = [
-        f"/images/{species}/{animal_dir.name}/{img.name}"
-        for img in sorted(animal_dir.glob("image_*.jpg"))
-    ]
-    if images:
-        data["local_images"] = images
-    return data
+def _animal_to_dict(animal: Animal) -> dict:
+    return {
+        "id": str(animal.id),
+        "source": animal.source,
+        "source_url": animal.source_url,
+        "name": animal.name,
+        "species": animal.species,
+        "race": animal.race,
+        "sex": animal.sex,
+        "birth_date": animal.birth_date,
+        "age": animal.age,
+        "refuge": animal.refuge,
+        "description": animal.description,
+        "incompatibilities": animal.incompatibilities or [],
+        "scraped_at": animal.scraped_at.isoformat() if animal.scraped_at else None,
+        "images": [img.url for img in animal.images],
+    }
 
 
 @app.get("/health")
-def health():
-    return {"status": "ok"}
+def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "ok", "db": "connected"}
+    except Exception as e:
+        return {"status": "degraded", "db": "unavailable", "detail": str(e)}
 
 
 @app.get("/animals")
-def list_animals(species: str = None):
-    animals = []
-    if not DATA_PATH.exists():
-        return animals
-    for species_dir in sorted(DATA_PATH.iterdir()):
-        if not species_dir.is_dir():
-            continue
-        if species and species_dir.name != species:
-            continue
-        for animal_dir in sorted(species_dir.iterdir()):
-            if not (animal_dir / "data.json").exists():
-                continue
-            try:
-                animals.append(_load_animal(animal_dir, species_dir.name))
-            except Exception:
-                pass
-    return animals
+def list_animals(
+    species: Optional[str] = None,
+    source: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Animal)
+    if species:
+        query = query.filter(Animal.species == species)
+    if source:
+        query = query.filter(Animal.source == source)
+    return [_animal_to_dict(a) for a in query.all()]
 
 
-@app.get("/animals/{species}/{animal_id}")
-def get_animal(species: str, animal_id: str):
-    animal_dir = DATA_PATH / species / animal_id
-    if not (animal_dir / "data.json").exists():
+@app.get("/animals/{animal_id}")
+def get_animal(animal_id: str, db: Session = Depends(get_db)):
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
         raise HTTPException(status_code=404, detail="Animal not found")
-    return _load_animal(animal_dir, species)
-
-
-# Sert les images scrapées localement (utile en dev, remplacé par S3 en prod)
-if DATA_PATH.exists():
-    app.mount("/images", StaticFiles(directory=str(DATA_PATH)), name="images")
+    return _animal_to_dict(animal)

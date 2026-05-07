@@ -7,7 +7,7 @@ from tqdm import tqdm
 from crawler_links import get_animal_links
 from driver import init_driver
 from parser_fiche_full import parse_fiche
-from storage import save_animal
+from storage import init_db, save_animal
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGES = int(os.environ.get("MAX_PAGES", "10"))
 NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "4"))
-DATA_PATH = os.environ.get("DATA_PATH", "data")
 
 
 def _chunk_list(lst, n):
@@ -49,9 +48,10 @@ def _worker(urls):
 
 
 def run():
-    logger.info("Starting scraper — max_pages=%d workers=%d data_path=%s",
-                MAX_PAGES, NUM_WORKERS, DATA_PATH)
+    logger.info("Initializing database")
+    init_db()
 
+    logger.info("Starting scraper — max_pages=%d workers=%d", MAX_PAGES, NUM_WORKERS)
     links = get_animal_links(max_pages=MAX_PAGES)
     logger.info("%d animals to scrape", len(links))
 
@@ -73,9 +73,8 @@ def run():
                     continue
 
                 for data in results:
-                    species = data.get("species") or "inconnu"
                     try:
-                        save_animal(data, species, base_path=DATA_PATH)
+                        save_animal(data)
                     except Exception as e:
                         logger.error("Failed to save %s: %s", data.get("name"), e)
                     pbar.update(1)
