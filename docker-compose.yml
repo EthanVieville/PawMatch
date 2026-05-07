@@ -1,0 +1,38 @@
+services:
+
+  # ── Frontend Next.js ──────────────────────────────────────────────────────
+  front:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # ── Backend FastAPI ────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./scraper/data:/app/data:ro   # lecture seule — le scraper écrit, l'api lit
+    environment:
+      - DATA_PATH=/app/data
+      - ALLOWED_ORIGINS=http://localhost:3000
+    restart: unless-stopped
+
+  # ── Scraper Selenium (job ponctuel, ne démarre pas par défaut) ─────────────
+  scraper:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    volumes:
+      - ./scraper/data:/app/data      # écriture locale ; remplacé par S3 en prod
+    profiles:
+      - scraper                       # docker compose --profile scraper run scraper
