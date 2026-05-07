@@ -1,0 +1,98 @@
+name: CI — Build Docker images
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build all images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./front
+          push: false
+          tags: animal-platform-front:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build api
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api
+          push: false
+          tags: animal-platform-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build scraper
+        uses: docker/build-push-action@v5
+        with:
+          context: ./scraper
+          push: false
+          tags: animal-platform-scraper:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+# ── CD vers AWS (décommenter quand le compte AWS est prêt) ────────────────────
+#
+#  deploy:
+#    name: Deploy to AWS ECS
+#    needs: build
+#    runs-on: ubuntu-latest
+#    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - name: Configure AWS credentials
+#        uses: aws-actions/configure-aws-credentials@v4
+#        with:
+#          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          aws-region:            ${{ secrets.AWS_REGION }}
+#
+#      - name: Login to Amazon ECR
+#        id: login-ecr
+#        uses: aws-actions/amazon-ecr-login@v2
+#
+#      - name: Push frontend to ECR
+#        run: |
+#          docker tag animal-platform-front:${{ github.sha }} \
+#            ${{ steps.login-ecr.outputs.registry }}/animal-platform-front:${{ github.sha }}
+#          docker push \
+#            ${{ steps.login-ecr.outputs.registry }}/animal-platform-front:${{ github.sha }}
+#
+#      - name: Push api to ECR
+#        run: |
+#          docker tag animal-platform-api:${{ github.sha }} \
+#            ${{ steps.login-ecr.outputs.registry }}/animal-platform-api:${{ github.sha }}
+#          docker push \
+#            ${{ steps.login-ecr.outputs.registry }}/animal-platform-api:${{ github.sha }}
+#
+#      - name: Deploy frontend service on ECS
+#        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+#        with:
+#          task-definition: ecs/front-task-def.json
+#          service:          animal-platform-front
+#          cluster:          animal-platform
+#          wait-for-service-stability: true
+#
+#      - name: Deploy api service on ECS
+#        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+#        with:
+#          task-definition: ecs/api-task-def.json
+#          service:          animal-platform-api
+#          cluster:          animal-platform
+#          wait-for-service-stability: true

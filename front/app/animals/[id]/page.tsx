@@ -1,4 +1,4 @@
-import { animals } from "../page";
+import { animals } from "../data";
 import Link from "next/link";
 
 export default async function AnimalDetail({

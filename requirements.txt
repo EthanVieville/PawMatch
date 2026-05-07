@@ -1,8 +1,10 @@
-os
-PIL
-torch
-transformers
-torchvision
-matplotlib
-numpy
-tensorboard
+# ML / dl_models dependencies
+torch==2.3.1
+torchvision==0.18.1
+transformers==4.44.2
+matplotlib==3.9.2
+numpy==1.26.4
+tensorboard==2.17.1
+tqdm==4.66.5
+scikit-learn==1.5.2
+Pillow==10.4.0

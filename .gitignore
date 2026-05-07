@@ -1,2 +1,6 @@
 dl_models/datasets/
-__pycache
+__pycache__/
+*.pyc
+.env
+.env.local
+scraper/data/
