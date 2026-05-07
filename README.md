@@ -62,7 +62,13 @@ Il n'est pas inclus dans le `docker compose up` par défaut.
 docker compose --profile scraper run scraper
 ```
 
+(Par défaut MAX_PAGES=10 / NUM_WORKERS=4)
 Les données sont sauvegardées dans `scraper/data/` et lues automatiquement par l'API.
+
+Si on veut faire une exec paramètrable : 
+```bash
+$env:MAX_PAGES=20; $env:NUM_WORKERS=2; docker compose --profile scraper run scraper
+```
 
 ---
 

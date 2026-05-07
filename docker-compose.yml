@@ -34,5 +34,9 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./scraper/data:/app/data      # écriture locale ; remplacé par S3 en prod
+    environment:
+      - DATA_PATH=/app/data
+      - MAX_PAGES=10                  # surcharger : $env:MAX_PAGES=20; docker compose --profile scraper run scraper
+      - NUM_WORKERS=4                 # workers parallèles Chrome
     profiles:
       - scraper                       # docker compose --profile scraper run scraper

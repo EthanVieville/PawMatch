@@ -1,84 +1,86 @@
-# scraper/main_spa_final.py
+import logging
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from tqdm import tqdm
 
 from crawler_links import get_animal_links
+from driver import init_driver
 from parser_fiche_full import parse_fiche
 from storage import save_animal
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
-
-
-def init_driver():
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    prefs = {
-        "profile.managed_default_content_settings.images": 2,
-        "profile.managed_default_content_settings.stylesheets": 2
-    }
-    options.add_experimental_option("prefs", prefs)
-
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
-
-    driver.set_page_load_timeout(10)
-
-    return driver
+MAX_PAGES = int(os.environ.get("MAX_PAGES", "10"))
+NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "4"))
+DATA_PATH = os.environ.get("DATA_PATH", "data")
 
 
-# 🔥 worker avec driver persistant
-def worker(urls):
+def _chunk_list(lst, n):
+    """Split lst into n roughly equal chunks."""
+    k, rem = divmod(len(lst), n)
+    chunks, start = [], 0
+    for i in range(n):
+        end = start + k + (1 if i < rem else 0)
+        if start < end:
+            chunks.append(lst[start:end])
+        start = end
+    return chunks
+
+
+def _worker(urls):
     driver = init_driver()
     results = []
-
-    for url in urls:
-        try:
-            data = parse_fiche(driver, url)
-            if data:
-                results.append(data)
-        except Exception as e:
-            print(f"❌ {url} -> {e}")
-
-    driver.quit()
+    try:
+        for url in urls:
+            try:
+                data = parse_fiche(driver, url)
+                if data:
+                    results.append(data)
+            except Exception as e:
+                logger.error("Failed to parse %s: %s", url, e)
+    finally:
+        driver.quit()
     return results
 
 
-def chunk_list(lst, n):
-    """Découpe liste en n chunks"""
-    k = len(lst) // n
-    return [lst[i*k:(i+1)*k] for i in range(n-1)] + [lst[(n-1)*k:]]
-
-
 def run():
-    links = get_animal_links(max_pages=10)
+    logger.info("Starting scraper — max_pages=%d workers=%d data_path=%s",
+                MAX_PAGES, NUM_WORKERS, DATA_PATH)
 
-    print(f"👉 {len(links)} animaux à scraper")
+    links = get_animal_links(max_pages=MAX_PAGES)
+    logger.info("%d animals to scrape", len(links))
 
-    num_workers = 4
-    chunks = chunk_list(links, num_workers)
+    if not links:
+        logger.warning("No links found, exiting")
+        return
 
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = [executor.submit(worker, chunk) for chunk in chunks]
+    chunks = _chunk_list(links, NUM_WORKERS)
 
-        # 🔥 tqdm corrigé
-        with tqdm(total=len(links), desc="🐾 Scraping animaux") as pbar:
+    with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+        futures = [executor.submit(_worker, chunk) for chunk in chunks]
+
+        with tqdm(total=len(links), desc="Scraping animals") as pbar:
             for future in as_completed(futures):
-                results = future.result()
+                try:
+                    results = future.result()
+                except Exception as e:
+                    logger.error("Worker failed: %s", e)
+                    continue
 
                 for data in results:
-                    save_animal(data, data["species"])
+                    species = data.get("species") or "inconnu"
+                    try:
+                        save_animal(data, species, base_path=DATA_PATH)
+                    except Exception as e:
+                        logger.error("Failed to save %s: %s", data.get("name"), e)
                     pbar.update(1)
+
+    logger.info("Scraping complete")
 
 
 if __name__ == "__main__":
