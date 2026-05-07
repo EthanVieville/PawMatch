@@ -1,5 +1,37 @@
 services:
 
+  # ── PostgreSQL + pgvector ─────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_DB=pawmatch
+      - POSTGRES_USER=pawmatch
+      - POSTGRES_PASSWORD=pawmatch
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pawmatch"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend FastAPI ────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   # ── Frontend Next.js ──────────────────────────────────────────────────────
   front:
     build:
@@ -13,30 +45,21 @@ services:
       - api
     restart: unless-stopped
 
-  # ── Backend FastAPI ────────────────────────────────────────────────────────
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./scraper/data:/app/data:ro   # lecture seule — le scraper écrit, l'api lit
-    environment:
-      - DATA_PATH=/app/data
-      - ALLOWED_ORIGINS=http://localhost:3000
-    restart: unless-stopped
-
   # ── Scraper Selenium (job ponctuel, ne démarre pas par défaut) ─────────────
   scraper:
     build:
       context: ./scraper
       dockerfile: Dockerfile
-    volumes:
-      - ./scraper/data:/app/data      # écriture locale ; remplacé par S3 en prod
     environment:
-      - DATA_PATH=/app/data
+      - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
+      - SCRAPER_SOURCE=la-spa
       - MAX_PAGES=10                  # surcharger : $env:MAX_PAGES=20; docker compose --profile scraper run scraper
-      - NUM_WORKERS=4                 # workers parallèles Chrome
+      - NUM_WORKERS=4
+    depends_on:
+      postgres:
+        condition: service_healthy
     profiles:
       - scraper                       # docker compose --profile scraper run scraper
+
+volumes:
+  postgres_data:
