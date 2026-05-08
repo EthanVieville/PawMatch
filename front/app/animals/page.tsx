@@ -1,5 +1,7 @@
 import AnimalCard, { Animal } from "../../components/AnimalCard";
 
+export const dynamic = "force-dynamic";
+
 const API_URL = process.env.API_URL ?? "http://localhost:8000";
 
 async function getAnimals(): Promise<Animal[]> {
