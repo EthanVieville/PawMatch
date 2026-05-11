@@ -77,3 +77,20 @@ def get_animal(animal_id: str, db: Session = Depends(get_db)):
     if not animal:
         raise HTTPException(status_code=404, detail="Animal not found")
     return _animal_to_dict(animal)
+
+
+@app.get("/animals/{animal_id}/similar")
+def get_similar_animals(animal_id: str, limit: int = 6, db: Session = Depends(get_db)):
+    animal = db.query(Animal).filter(Animal.id == animal_id).first()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal not found")
+    if animal.embedding is None:
+        return []
+    similar = (
+        db.query(Animal)
+        .filter(Animal.id != animal.id, Animal.embedding.isnot(None))
+        .order_by(Animal.embedding.cosine_distance(animal.embedding))
+        .limit(limit)
+        .all()
+    )
+    return [_animal_to_dict(a) for a in similar]

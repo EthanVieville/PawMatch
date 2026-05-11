@@ -44,8 +44,7 @@ class Animal(Base):
     description = Column(Text)
     incompatibilities = Column(ARRAY(String))
     scraped_at = Column(TIMESTAMP, server_default="NOW()")
-    # Colonne vectorielle — NULL pour l'instant, remplie quand on branche le LLM
-    embedding = Column(Vector(1536), nullable=True)
+    embedding = Column(Vector(384), nullable=True)
 
     images = relationship(
         "AnimalImage",
