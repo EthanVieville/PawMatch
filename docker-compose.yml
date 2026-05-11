@@ -45,21 +45,40 @@ services:
       - api
     restart: unless-stopped
 
-  # ── Scraper Selenium (job ponctuel, ne démarre pas par défaut) ─────────────
-  scraper:
+  # ── Scraper la-spa.fr (job ponctuel) ──────────────────────────────────────
+  # docker compose --profile scraper run --rm scraper-laspa
+  scraper-laspa:
     build:
       context: ./scraper
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
       - SCRAPER_SOURCE=la-spa
-      - MAX_PAGES=10                  # surcharger : $env:MAX_PAGES=20; docker compose --profile scraper run scraper
-      - NUM_WORKERS=4
+      - MAX_PAGES=10                  # pages de listing (~20 animaux/page)
+      - NUM_WORKERS=1
     depends_on:
       postgres:
         condition: service_healthy
     profiles:
-      - scraper                       # docker compose --profile scraper run scraper
+      - scraper
+
+  # ── Scraper 30millionsdamis.fr (job ponctuel) ─────────────────────────────
+  # docker compose --profile scraper run --rm scraper-30m
+  # MAX_PAGES s'applique PAR type (chien/chat/autre) : MAX_PAGES=3 ≈ 90 animaux
+  scraper-30m:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
+      - SCRAPER_SOURCE=30millionsdamis
+      - MAX_PAGES=3                   # 3 pages × 3 types ≈ 90 animaux
+      - NUM_WORKERS=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - scraper
 
 volumes:
   postgres_data:
