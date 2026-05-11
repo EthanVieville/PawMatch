@@ -25,4 +25,4 @@ COPY . .
 # Les données scrapées sont montées en volume (local) ou uploadées en S3 (prod)
 VOLUME ["/app/data"]
 
-CMD ["python", "main_spa_full.py"]
+CMD ["python", "main.py"]
