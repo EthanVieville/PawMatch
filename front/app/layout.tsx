@@ -1,5 +1,6 @@
 import './globals.css';
 import Navbar from '../components/Navbar';
+import ChatWidget from '../components/ChatWidget';
 import { ReactNode } from 'react';
 
 export default function RootLayout({
@@ -12,6 +13,7 @@ export default function RootLayout({
       <body className="text-gray-900">
         <Navbar />
         {children}
+        <ChatWidget />
       </body>
     </html>
   );

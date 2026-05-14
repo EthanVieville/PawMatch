@@ -69,6 +69,18 @@ class AnimalImage(Base):
     animal = relationship("Animal", back_populates="images")
 
 
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    category = Column(String, nullable=False)  # adoption_process | care_advice | shelter_info
+    source = Column(String)                    # la-spa | secondechance | general
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding = Column(Vector(384), nullable=True)
+    created_at = Column(TIMESTAMP, server_default="NOW()")
+
+
 def init_db():
     # L'extension vector doit exister avant que create_all crée la colonne embedding
     with engine.connect() as conn:
