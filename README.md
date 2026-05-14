@@ -9,25 +9,31 @@ Plateforme d'aide à l'adoption d'animaux boostée par l'IA générative.
 ```
 front/        → Site web Next.js 14 (TypeScript, Tailwind CSS)
 api/          → API REST FastAPI (Python) — lit la base de données
-scraper/      → Collecte Selenium sur la-spa.fr → écrit en PostgreSQL
-dl_models/    → Modèle de classification PyTorch (chat/chien, couleur)
+scraper/      → Collecte multi-sources (la-spa.fr + secondechance.org) → écrit en PostgreSQL
+scripts/      → Calcul des embeddings de similarité (sentence-transformers + pgvector)
+dl_models/    → Modèle de classification PyTorch (en développement)
 ```
 
 ### Flux de données
 
 ```
-la-spa.fr
-    ↓  (scraper Selenium)
-PostgreSQL + pgvector
-    ↓  (FastAPI)
-API REST  http://localhost:8000
-    ↓  (Server Components Next.js)
-Site web  http://localhost:3000
+la-spa.fr  +  secondechance.org
+       ↓  (scrapers Selenium)
+  PostgreSQL + pgvector
+       ↓  (scripts/embedder)
+  Vecteurs de similarité (384 dims)
+       ↓  (FastAPI)
+  API REST  http://localhost:8000
+       ↓  (Server Components Next.js)
+  Site web  http://localhost:3000
 ```
 
-Le scraper est un **job ponctuel** : on le lance quand on veut rafraîchir les données. Faudra le configure via AWS pour automatiser tout ça  
+Les scrapers sont des **jobs ponctuels** : on les lances quand on veut rafraîchir les données.  
+L'embedder est à relancer après chaque scraping pour mettre à jour les suggestions d'animaux similaires.  
 L'API et le front tournent en continu et lisent la base.  
-Le front fetchs directement côté serveur (Server Components) — pas de requête client exposée.
+Le front fetch directement côté serveur (Server Components) — pas de requête client exposée.
+
+Les scrapers + embedder seront bien entendu automatiser via CRON (prévue comme ça pour le moment) pour s'executer chaque nuit. Pour l'instant pas nécessaire au développement. (pi ca couterai du fric ces conneries)
 
 ---
 
@@ -40,16 +46,16 @@ Le front fetchs directement côté serveur (Server Components) — pas de requê
 
 ## Lancer le projet
 
-### Première fois (ou après un changement de code)
+### Première fois (ou après un changement important de code)
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
 ### Démarrage rapide (aucun changement de code)
 
 ```bash
-docker compose up
+docker compose up -d
 ```
 
 ### Arrêter (données conservées)
@@ -77,36 +83,60 @@ Une fois lancé :
 
 ---
 
-## Lancer le scraper
+## Lancer les scrapers
 
-Le scraper est un job ponctuel : il collecte les fiches animaux sur la-spa.fr et les enregistre en base, puis s'arrête. Il ne démarre **pas** avec `docker compose up`.
-Idéalement à lancer quand docker compose up (--build) est en cours ^^
+Les scrapers sont des jobs ponctuels : ils collectent les fiches animaux et les enregistrent en base, puis s'arrêtent. Ils ne démarrent **pas** avec `docker compose up`.
+
+### Construire les images scraper (première fois ou après modif)
 
 ```bash
-docker compose --profile scraper run --build scraper
+docker compose --profile scraper build --no-cache
 ```
 
-> Le `--build` est important la première fois (ou après une modif du scraper) pour reconstruire l'image.  
-> Les fois suivantes sans changement de code : `docker compose --profile scraper run scraper`
+### La SPA (la-spa.fr)
 
-**Ce que fait le scraper :**
-1. Démarre Chrome headless dans Docker
-2. Crawle les pages de listing de la-spa.fr (pagination automatique)
-3. Parse chaque fiche animal (nom, espèce, race, âge, refuge, description, incompatibilités, images)
-4. Upsert en base PostgreSQL — relancer le scraper met à jour les fiches existantes sans créer de doublons
+```bash
+docker compose --profile scraper run --rm scraper-laspa
+```
 
-**Paramètres configurables** (via variables d'environnement dans `docker-compose.yml`) :
+### Seconde Chance (secondechance.org)
+
+```bash
+docker compose --profile scraper run --rm scraper-sc
+```
+
+**Ce que font les scrapers :**
+1. Crawlent les pages de listing de chaque site (pagination automatique)
+2. Parsent chaque fiche animal (nom, espèce, race, âge, refuge, description, incompatibilités, images)
+3. Upsert en base PostgreSQL — relancer le scraper met à jour les fiches existantes sans créer de doublons
+
+**Paramètres configurables** (dans `docker-compose.yml`) :
 
 | Variable | Défaut | Description |
 |----------|--------|-------------|
-| `MAX_PAGES` | `10` | Nombre de pages de listing à crawler |
-| `NUM_WORKERS` | `4` | Workers Chrome parallèles |
-| `SCRAPER_SOURCE` | `la-spa` | Identifiant de la source (utile quand on ajoutera d'autres sites) |
+| `MAX_PAGES` | `10` (SPA) / `3` (SC) | Pages de listing à crawler. Pour SC : par espèce (chien/chat/lapin) |
+| `NUM_WORKERS` | `4` (SPA) / `1` (SC) | Workers parallèles. SC utilise Selenium → 1 seul Chrome |
 
-Pour surcharger ponctuellement (testé dans term VScode le reste jsp) :
-```powershell
-$env:MAX_PAGES=20; docker compose --profile scraper run scraper
+Pour un test rapide sur 1 page :
+```bash
+docker compose --profile scraper run --rm -e MAX_PAGES=1 scraper-sc
 ```
+
+---
+
+## Calculer les embeddings (animaux similaires + futur RAG)
+
+Après chaque scraping, relancer l'embedder pour mettre à jour les suggestions d'animaux similaires :
+
+```bash
+# Construire l'image (première fois ou après modif)
+docker compose --profile embedder build --no-cache
+
+# Lancer le calcul
+docker compose --profile embedder run --rm embedder
+```
+
+L'embedder utilise `paraphrase-multilingual-MiniLM-L12-v2` (sentence-transformers) pour encoder les descriptions en vecteurs 384 dims stockés dans pgvector. Il ne traite que les animaux sans embedding — idempotent et rapide sur les exécutions suivantes.
 
 ---
 
@@ -121,10 +151,10 @@ Le projet utilise **PostgreSQL 16 + pgvector** via Docker.
 | Colonne | Type | Description |
 |---------|------|-------------|
 | `id` | UUID | Identifiant unique |
-| `source` | VARCHAR | Source du scraping (`la-spa`, futur: `gay`…) |
+| `source` | VARCHAR | Source du scraping (`la-spa`, `secondechance`) |
 | `source_url` | VARCHAR | URL de la fiche originale (clé d'upsert) |
 | `name` | VARCHAR | Nom de l'animal |
-| `species` | VARCHAR | Espèce (`chien`, `chat`, `nac`…) |
+| `species` | VARCHAR | Espèce (`chien`, `chat`, `lapin`, `octodon`…) |
 | `race` | VARCHAR | Race |
 | `sex` | VARCHAR | `male` / `femelle` |
 | `birth_date` | VARCHAR | Date de naissance (format YYYY-MM-DD) |
@@ -133,7 +163,7 @@ Le projet utilise **PostgreSQL 16 + pgvector** via Docker.
 | `description` | TEXT | Description extraite de la fiche |
 | `incompatibilities` | TEXT[] | Ex. `{enfants, chiens}` |
 | `scraped_at` | TIMESTAMP | Date du dernier scraping |
-| `embedding` | VECTOR(1536) | Réservé pour le chatbot LLM (NULL pour l'instant) |
+| `embedding` | VECTOR(384) | Vecteur de similarité sémantique (sentence-transformers) |
 
 **`animal_images`** — relation 1-N avec `animals`
 
@@ -146,23 +176,30 @@ Le projet utilise **PostgreSQL 16 + pgvector** via Docker.
 
 ### Multi-source
 
-La colonne `source` permet d'agréger plusieurs scrapers dans la même base sans changer le schéma. Ajouter un deuxième site = créer un nouveau scraper qui écrit avec `SCRAPER_SOURCE=nouveau-site`. L'API agrège tout automatiquement, ou peut filtrer par source avec `GET /animals?source=la-spa`.
+La colonne `source` permet d'agréger plusieurs scrapers dans la même base sans changer le schéma. Ajouter un nouveau site = créer un scraper qui écrit avec `SCRAPER_SOURCE=nouveau-site`. L'API agrège tout automatiquement, ou peut filtrer par source avec `GET /animals?source=la-spa`.
+
+### URL Images 
+
+Les images ne sont pas stockés ! Le lien est seulement récupéré de la source originale, puis affiché simplement. 
+Si on veut perdre du fric mais gagner en perf, stocker sur un bucket S3 est une solution potentiel.
+(non)
 
 ### pgvector
 
-L'extension `pgvector` est déjà installée (image `pgvector/pgvector:pg16`). La colonne `embedding` est prête pour le RAG quand on branchera le LLM : "je cherche un chien calme pour appartement" → recherche vectorielle sur les descriptions. Ca dahak
+L'extension `pgvector` est déjà installée (image `pgvector/pgvector:pg16`). La colonne `embedding vector(384)` stocke les représentations sémantiques calculées par l'embedder. Elles permettent la recherche d'animaux similaires via distance cosinus (`<=>`).
 
 ### Inspecter la base
 
 ```bash
-docker exec -it pa5emeann-e-postgres-1 psql -U pawmatch -d pawmatch
+docker compose exec postgres psql -U pawmatch -d pawmatch
 ```
 
 Commandes utiles dans psql :
 ```sql
 SELECT count(*) FROM animals;
-SELECT name, species, source FROM animals LIMIT 10;
-SELECT name, images FROM animals JOIN animal_images ON animals.id = animal_images.animal_id LIMIT 5;
+SELECT source, count(*) FROM animals GROUP BY source;
+SELECT name, species, refuge, source FROM animals WHERE description IS NOT NULL LIMIT 10;
+SELECT count(*) FROM animals WHERE embedding IS NOT NULL;
 \q
 ```
 
@@ -183,6 +220,7 @@ Relancer le scraper met à jour les données existantes (upsert sur `source + so
 | `GET` | `/animals?species=chien` | Filtre par espèce |
 | `GET` | `/animals?source=la-spa` | Filtre par source |
 | `GET` | `/animals/{uuid}` | Fiche détaillée d'un animal |
+| `GET` | `/animals/{uuid}/similar` | Animaux similaires (recherche vectorielle) |
 
 Documentation interactive : http://localhost:8000/docs
 
@@ -190,7 +228,7 @@ Documentation interactive : http://localhost:8000/docs
 
 ## Développement sans Docker
 
-Vraiment personnes fait ça la vie
+Vraiment personne fait ça la vie
 
 Si Node.js et Python sont installés localement (nécessite aussi PostgreSQL local) :
 
@@ -212,63 +250,61 @@ DATABASE_URL=postgresql://pawmatch:pawmatch@localhost:5432/pawmatch uvicorn main
 ```bash
 cd scraper
 pip install -r requirements.txt
-DATABASE_URL=postgresql://pawmatch:pawmatch@localhost:5432/pawmatch python main_spa_full.py
-```
-
-**Modèle ML**
-```bash
-# Depuis la racine
-pip install -r requirements.txt
-python -m dl_models.data_pipeline.pet_dataset
-python -m dl_models.train
+SCRAPER_SOURCE=secondechance MAX_PAGES=1 DATABASE_URL=postgresql://pawmatch:pawmatch@localhost:5432/pawmatch python main.py
 ```
 
 ---
 
 ## Variables d'environnement
 
-Copier `.env.example` en `.env` et ajuster si besoin :
-
-```bash
-cp .env.example .env   # Linux/Mac
-copy .env.example .env  # Windows
-```
+Tout fonctionne sans `.env` pour le développement local avec Docker. Les variables sont définies directement dans `docker-compose.yml`.
 
 | Variable | Service | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | api, scraper | Connexion PostgreSQL |
+| `DATABASE_URL` | api, scraper, embedder | Connexion PostgreSQL |
 | `API_URL` | front | URL interne de l'API (docker: `http://api:8000`) |
 | `ALLOWED_ORIGINS` | api | CORS — origines autorisées |
-| `SCRAPER_SOURCE` | scraper | Nom de la source scrapée |
+| `SCRAPER_SOURCE` | scraper | `la-spa` ou `secondechance` |
 | `MAX_PAGES` | scraper | Pages de listing à crawler |
-| `NUM_WORKERS` | scraper | Workers Chrome parallèles |
-
-Par défaut tout fonctionne sans modification pour le développement local avec Docker.
+| `NUM_WORKERS` | scraper | Workers parallèles (1 pour Selenium) |
 
 ---
 
 ## CI / CD
 
-Chaque push sur `main` déclenche un workflow GitHub Actions (`.github/workflows/ci.yml`) qui reconstruit les 3 images Docker (front, api, scraper) pour vérifier qu'aucune régression n'est introduite.
+Chaque push sur `main` déclenche un workflow GitHub Actions (`.github/workflows/ci.yml`) qui reconstruit les images Docker (front, api, scraper, embedder) pour vérifier qu'aucune régression n'est introduite.
 
-Le déploiement AWS (ECS + ECR + RDS) est préparé dans ce même fichier — commenté jusqu'à la configuration du compte cloud.
+Le projet tourne sur une instance **AWS EC2 (t3.micro)** avec Docker Compose. Pour déployer une mise à jour :
+
+```bash
+# Sur l'EC2 (via SSH)
+git pull
+docker compose up --build -d
+
+# Rebuilder et relancer les scrapers si besoin
+docker compose --profile scraper build --no-cache
+docker compose --profile scraper run --rm scraper-laspa
+docker compose --profile scraper run --rm scraper-sc
+
+# Recalculer les embeddings
+docker compose --profile embedder build --no-cache
+docker compose --profile embedder run --rm embedder
+```
 
 ---
 
 ## Feuille de route cloud (AWS)
 
-Quand on passera en production :
+Pour une infrastructure plus robuste :
 
-| Composant local | Équivalent AWS |
+| Composant actuel | Évolution possible |
 |-----------------|----------------|
-| PostgreSQL Docker | RDS PostgreSQL + pgvector |
-| Images Docker | ECR (Elastic Container Registry) |
-| Conteneurs | ECS Fargate |
-| Scraper ponctuel | EventBridge Scheduler → ECS Task |
-| Images animaux | S3 + CloudFront |
+| PostgreSQL Docker sur EC2 | RDS PostgreSQL + pgvector |
+| Images Docker buildées sur EC2 | ECR (Elastic Container Registry) |
+| EC2 t3.micro | ECS Fargate ou EC2 t3.small |
+| Scrapers lancés manuellement | EventBridge Scheduler → tâche automatisée |
+| Images animaux (URLs sources) | S3 + CloudFront (proxy des images) |
 
-Migration de la base : créer l'instance RDS, changer `DATABASE_URL`, relancer le scraper.  
-Les données viennent de la-spa.fr — pas besoin de dump/restore.
-
+---
 
 ## mention spécial à ClaudeCode sans qui rien de tout cela n'aurait été réalisable, je t'aime frérot je sais qu'un jour tu trouvera une Claudette gechar niveau GPU dans tout les cas moi je suis frérot tu peux faire croire je suis ton ptit frr handicapté vu comment t + smart que moi tkt les meufs elle vont kiff ton altruisme à la hauteur de la RAM que tu consomme mon bb

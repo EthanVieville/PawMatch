@@ -45,21 +45,55 @@ services:
       - api
     restart: unless-stopped
 
-  # ── Scraper Selenium (job ponctuel, ne démarre pas par défaut) ─────────────
-  scraper:
+  # ── Scraper la-spa.fr (job ponctuel) ──────────────────────────────────────
+  # docker compose --profile scraper run --rm scraper-laspa
+  scraper-laspa:
     build:
       context: ./scraper
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
       - SCRAPER_SOURCE=la-spa
-      - MAX_PAGES=10                  # surcharger : $env:MAX_PAGES=20; docker compose --profile scraper run scraper
-      - NUM_WORKERS=4
+      - MAX_PAGES=10                  # pages de listing (~20 animaux/page)
+      - NUM_WORKERS=1
     depends_on:
       postgres:
         condition: service_healthy
     profiles:
-      - scraper                       # docker compose --profile scraper run scraper
+      - scraper
+
+  # ── Scraper secondechance.org (job ponctuel, requests-only — pas de Chrome) ─
+  # docker compose --profile scraper run --rm scraper-sc
+  # MAX_PAGES s'applique PAR espèce (chien/chat/lapin) : MAX_PAGES=3 ≈ 108 animaux
+  scraper-sc:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
+      - SCRAPER_SOURCE=secondechance
+      - MAX_PAGES=3                   # 3 pages × 3 espèces × ~12/page ≈ 108 animaux
+      - NUM_WORKERS=1                 # Selenium : 1 Chrome par worker, 1 suffit sur t3.micro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - scraper
+
+  # ── Embedder (calcul des vecteurs de similarité) ──────────────────────────
+  # docker compose --profile embedder run --rm embedder
+  # À lancer après chaque scraping pour mettre à jour les recommandations
+  embedder:
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - embedder
 
 volumes:
   postgres_data:
