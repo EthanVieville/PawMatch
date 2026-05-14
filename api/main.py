@@ -3,11 +3,15 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
+import boto3
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from chat import stream_chat
 from database import Animal, get_db, init_db
 
 logger = logging.getLogger(__name__)
@@ -16,6 +20,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    app.state.bedrock = boto3.client(
+        "bedrock-runtime",
+        region_name=os.getenv("AWS_REGION", "eu-west-1"),
+    )
     yield
 
 
@@ -24,7 +32,7 @@ app = FastAPI(title="PawMatch API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -94,3 +102,24 @@ def get_similar_animals(animal_id: str, limit: int = 6, db: Session = Depends(ge
         .all()
     )
     return [_animal_to_dict(a) for a in similar]
+
+
+class ChatRequest(BaseModel):
+    message: str
+    animal_id: Optional[str] = None
+    history: list[dict] = []
+
+
+@app.post("/chat")
+def chat(request: ChatRequest, db: Session = Depends(get_db)):
+    return StreamingResponse(
+        stream_chat(
+            message=request.message,
+            history=request.history,
+            animal_id=request.animal_id,
+            db=db,
+            bedrock_client=app.state.bedrock,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

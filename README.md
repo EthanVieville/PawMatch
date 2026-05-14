@@ -8,9 +8,9 @@ Plateforme d'aide à l'adoption d'animaux boostée par l'IA générative.
 
 ```
 front/        → Site web Next.js 14 (TypeScript, Tailwind CSS)
-api/          → API REST FastAPI (Python) — lit la base de données
+api/          → API REST FastAPI (Python) — lit la base de données + chatbot LLM
 scraper/      → Collecte multi-sources (la-spa.fr + secondechance.org) → écrit en PostgreSQL
-scripts/      → Calcul des embeddings de similarité (sentence-transformers + pgvector)
+scripts/      → Calcul des embeddings (sentence-transformers + pgvector) + seed knowledge base
 dl_models/    → Modèle de classification PyTorch (en développement)
 ```
 
@@ -26,20 +26,29 @@ la-spa.fr  +  secondechance.org
   API REST  http://localhost:8000
        ↓  (Server Components Next.js)
   Site web  http://localhost:3000
+
+  Chatbot PawBuddy (widget flottant sur toutes les pages)
+       ↓  (Next.js /api/chat proxy)
+  FastAPI POST /chat
+       ↓  (RAG pgvector + knowledge_chunks)
+  Amazon Bedrock (Claude Haiku 4.5)
+       ↓  (SSE streaming)
+  Réponse streamée token par token
 ```
 
-Les scrapers sont des **jobs ponctuels** : on les lances quand on veut rafraîchir les données.  
-L'embedder est à relancer après chaque scraping pour mettre à jour les suggestions d'animaux similaires.  
+Les scrapers sont des **jobs ponctuels** : on les lance quand on veut rafraîchir les données.  
+L'embedder est à relancer après chaque scraping pour mettre à jour les suggestions d'animaux similaires et les embeddings du knowledge base.  
 L'API et le front tournent en continu et lisent la base.  
-Le front fetch directement côté serveur (Server Components) — pas de requête client exposée.
+Le front fetch directement côté serveur (Server Components) — pas de requête client exposée, sauf pour le chatbot qui passe par un proxy Next.js.
 
-Les scrapers + embedder seront bien entendu automatiser via CRON (prévue comme ça pour le moment) pour s'executer chaque nuit. Pour l'instant pas nécessaire au développement. (pi ca couterai du fric ces conneries)
+Les scrapers + embedder seront bien entendu automatisés via CRON pour s'exécuter chaque nuit. Pour l'instant pas nécessaire au développement. (pi ça coûterait du fric ces conneries)
 
 ---
 
 ## Prérequis
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et démarré
+- Un fichier `.env` à la racine (voir section Variables d'environnement)
 - C'est okay bb.
 
 ---
@@ -49,10 +58,17 @@ Les scrapers + embedder seront bien entendu automatiser via CRON (prévue comme 
 ### Première fois (ou après un changement important de code)
 
 ```bash
+# 1. Build et démarrage du stack principal
 docker compose up --build -d
+
+# 2. Peupler la knowledge base (process d'adoption, conseils soins, infos refuges)
+docker compose --profile seeder run --rm seeder
+
+# 3. Calculer les embeddings (animaux + knowledge base)
+docker compose --profile embedder run --rm embedder
 ```
 
-### Démarrage rapide (aucun changement de code)
+### Démarrage rapide (aucun changement de code, données déjà en base)
 
 ```bash
 docker compose up -d
@@ -124,9 +140,22 @@ docker compose --profile scraper run --rm -e MAX_PAGES=1 scraper-sc
 
 ---
 
-## Calculer les embeddings (animaux similaires + futur RAG)
+## Peupler la knowledge base (chatbot)
 
-Après chaque scraping, relancer l'embedder pour mettre à jour les suggestions d'animaux similaires :
+La knowledge base contient les informations sur les processus d'adoption, les conseils de soins et les infos sur les refuges — utilisées par le chatbot PawBuddy via RAG.
+
+```bash
+# Peupler la table knowledge_chunks (idempotent — remet à zéro et réinsère)
+docker compose --profile seeder run --rm seeder
+```
+
+À relancer si le contenu de `scripts/seed_knowledge.py` est modifié. Suivi d'un embedder pour recalculer les vecteurs.
+
+---
+
+## Calculer les embeddings (animaux similaires + RAG chatbot)
+
+Après chaque scraping ou modification de la knowledge base, relancer l'embedder :
 
 ```bash
 # Construire l'image (première fois ou après modif)
@@ -136,7 +165,7 @@ docker compose --profile embedder build --no-cache
 docker compose --profile embedder run --rm embedder
 ```
 
-L'embedder utilise `paraphrase-multilingual-MiniLM-L12-v2` (sentence-transformers) pour encoder les descriptions en vecteurs 384 dims stockés dans pgvector. Il ne traite que les animaux sans embedding — idempotent et rapide sur les exécutions suivantes.
+L'embedder utilise `paraphrase-multilingual-MiniLM-L12-v2` (sentence-transformers) pour encoder en vecteurs 384 dims stockés dans pgvector. Il traite les animaux **et** les knowledge chunks. Idempotent — ne retouche que les entrées sans embedding.
 
 ---
 
@@ -174,19 +203,31 @@ Le projet utilise **PostgreSQL 16 + pgvector** via Docker.
 | `url` | VARCHAR | URL de l'image (source originale) |
 | `position` | INTEGER | Ordre d'affichage |
 
+**`knowledge_chunks`** — base de connaissances pour le chatbot RAG
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| `id` | UUID | Identifiant |
+| `category` | VARCHAR | `adoption_process` / `care_advice` / `shelter_info` |
+| `source` | VARCHAR | `la-spa` / `secondechance` / `general` |
+| `title` | VARCHAR | Titre du chunk |
+| `content` | TEXT | Contenu (processus d'adoption, conseils, infos refuges) |
+| `embedding` | VECTOR(384) | Vecteur pour la recherche sémantique RAG |
+| `created_at` | TIMESTAMP | Date de création |
+
 ### Multi-source
 
 La colonne `source` permet d'agréger plusieurs scrapers dans la même base sans changer le schéma. Ajouter un nouveau site = créer un scraper qui écrit avec `SCRAPER_SOURCE=nouveau-site`. L'API agrège tout automatiquement, ou peut filtrer par source avec `GET /animals?source=la-spa`.
 
-### URL Images 
+### URL Images
 
-Les images ne sont pas stockés ! Le lien est seulement récupéré de la source originale, puis affiché simplement. 
-Si on veut perdre du fric mais gagner en perf, stocker sur un bucket S3 est une solution potentiel.
+Les images ne sont pas stockées ! Le lien est seulement récupéré de la source originale, puis affiché simplement.  
+Si on veut perdre du fric mais gagner en perf, stocker sur un bucket S3 est une solution potentielle.  
 (non)
 
 ### pgvector
 
-L'extension `pgvector` est déjà installée (image `pgvector/pgvector:pg16`). La colonne `embedding vector(384)` stocke les représentations sémantiques calculées par l'embedder. Elles permettent la recherche d'animaux similaires via distance cosinus (`<=>`).
+L'extension `pgvector` est déjà installée (image `pgvector/pgvector:pg16`). La colonne `embedding vector(384)` stocke les représentations sémantiques calculées par l'embedder. Elles permettent la recherche d'animaux similaires via distance cosinus (`<=>`) et le RAG du chatbot.
 
 ### Inspecter la base
 
@@ -200,6 +241,7 @@ SELECT count(*) FROM animals;
 SELECT source, count(*) FROM animals GROUP BY source;
 SELECT name, species, refuge, source FROM animals WHERE description IS NOT NULL LIMIT 10;
 SELECT count(*) FROM animals WHERE embedding IS NOT NULL;
+SELECT category, count(*) FROM knowledge_chunks GROUP BY category;
 \q
 ```
 
@@ -221,8 +263,36 @@ Relancer le scraper met à jour les données existantes (upsert sur `source + so
 | `GET` | `/animals?source=la-spa` | Filtre par source |
 | `GET` | `/animals/{uuid}` | Fiche détaillée d'un animal |
 | `GET` | `/animals/{uuid}/similar` | Animaux similaires (recherche vectorielle) |
+| `POST` | `/chat` | Chatbot PawBuddy — streaming SSE (intent routing + RAG + Bedrock) |
 
 Documentation interactive : http://localhost:8000/docs
+
+---
+
+## Chatbot PawBuddy
+
+Widget flottant accessible depuis toutes les pages. Alimenté par **Amazon Bedrock (Claude Haiku 4.5)** via RAG sur la base PostgreSQL.
+
+**Fonctionnalités :**
+- Recherche d'animaux à adopter avec liens cliquables vers les fiches
+- Informations sur les démarches et modalités d'adoption
+- Conseils de soins par espèce
+- Conversation persistante entre les pages et après refresh (localStorage)
+- Streaming token par token
+
+**Architecture du chatbot :**
+```
+Message utilisateur
+  → Classificateur d'intention (Bedrock, max_tokens=10)
+      ├── find_animal      → RAG sur animals (filtre par espèce)
+      ├── adoption_process → RAG sur knowledge_chunks (adoption_process + shelter_info)
+      ├── care_advice      → RAG sur knowledge_chunks (care_advice)
+      └── general          → RAG sur les deux
+  → Prompt système dynamique + contexte injecté
+  → Claude Haiku 4.5 (Bedrock) — réponse streamée SSE
+```
+
+Voir `documentation/bedrock_setup.md` pour la configuration AWS complète.
 
 ---
 
@@ -257,7 +327,7 @@ SCRAPER_SOURCE=secondechance MAX_PAGES=1 DATABASE_URL=postgresql://pawmatch:pawm
 
 ## Variables d'environnement
 
-Tout fonctionne sans `.env` pour le développement local avec Docker. Les variables sont définies directement dans `docker-compose.yml`.
+Copier `.env.example` en `.env` et remplir les valeurs AWS. Toutes les autres variables ont des valeurs par défaut dans `docker-compose.yml`.
 
 | Variable | Service | Description |
 |----------|---------|-------------|
@@ -267,6 +337,12 @@ Tout fonctionne sans `.env` pour le développement local avec Docker. Les variab
 | `SCRAPER_SOURCE` | scraper | `la-spa` ou `secondechance` |
 | `MAX_PAGES` | scraper | Pages de listing à crawler |
 | `NUM_WORKERS` | scraper | Workers parallèles (1 pour Selenium) |
+| `AWS_REGION` | api | Région Bedrock (`eu-west-1`) |
+| `AWS_ACCESS_KEY_ID` | api | Clé d'accès IAM (dev local uniquement) |
+| `AWS_SECRET_ACCESS_KEY` | api | Secret IAM (dev local uniquement) |
+| `BEDROCK_MODEL` | api | Override du modèle Bedrock (optionnel) |
+
+> Sur EC2, `AWS_ACCESS_KEY_ID` et `AWS_SECRET_ACCESS_KEY` ne sont pas nécessaires — le IAM role attaché à l'instance prend le relais automatiquement.
 
 ---
 
@@ -274,21 +350,23 @@ Tout fonctionne sans `.env` pour le développement local avec Docker. Les variab
 
 Chaque push sur `main` déclenche un workflow GitHub Actions (`.github/workflows/ci.yml`) qui reconstruit les images Docker (front, api, scraper, embedder) pour vérifier qu'aucune régression n'est introduite.
 
-Le projet tourne sur une instance **AWS EC2 (t3.micro)** avec Docker Compose. Pour déployer une mise à jour :
+Le projet tourne sur une instance **AWS EC2 (t3.micro)** avec Docker Compose. Le front est déployé sur **AWS Amplify**. Pour déployer une mise à jour :
 
 ```bash
 # Sur l'EC2 (via SSH)
 git pull
 docker compose up --build -d
 
+# Peupler/mettre à jour la knowledge base si modifiée
+docker compose --profile seeder run --rm seeder
+
+# Recalculer les embeddings
+docker compose --profile embedder run --rm embedder
+
 # Rebuilder et relancer les scrapers si besoin
 docker compose --profile scraper build --no-cache
 docker compose --profile scraper run --rm scraper-laspa
 docker compose --profile scraper run --rm scraper-sc
-
-# Recalculer les embeddings
-docker compose --profile embedder build --no-cache
-docker compose --profile embedder run --rm embedder
 ```
 
 ---
@@ -304,6 +382,7 @@ Pour une infrastructure plus robuste :
 | EC2 t3.micro | ECS Fargate ou EC2 t3.small |
 | Scrapers lancés manuellement | EventBridge Scheduler → tâche automatisée |
 | Images animaux (URLs sources) | S3 + CloudFront (proxy des images) |
+| Bedrock on-demand | Provisioned throughput si fort trafic |
 
 ---
 

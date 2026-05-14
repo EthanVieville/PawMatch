@@ -27,6 +27,10 @@ services:
     environment:
       - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
       - ALLOWED_ORIGINS=http://localhost:3000
+      - AWS_REGION=${AWS_REGION:-eu-west-1}
+      # En local uniquement — sur EC2 le IAM role prend le relais, pas besoin de ces vars
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,6 +98,22 @@ services:
         condition: service_healthy
     profiles:
       - embedder
+
+  # ── Seeder (peuplement knowledge_chunks) ─────────────────────────────────
+  # docker compose --profile seeder run --rm seeder
+  # À lancer une fois, ou après modification du contenu dans seed_knowledge.py
+  seeder:
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
+    command: python seed_knowledge.py
+    environment:
+      - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - seeder
 
 volumes:
   postgres_data:

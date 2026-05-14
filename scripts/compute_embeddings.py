@@ -60,6 +60,31 @@ def _migrate_column(conn):
             print(f"Embedding column already at {EMBEDDING_DIM} dims, no migration needed.")
 
 
+def _embed_knowledge_chunks(conn, model):
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, title, content FROM knowledge_chunks WHERE embedding IS NULL")
+        rows = cur.fetchall()
+
+    if not rows:
+        print("No knowledge chunks to embed.")
+        return
+
+    chunks = [dict(zip(["id", "title", "content"], r)) for r in rows]
+    print(f"{len(chunks)} knowledge chunks to embed")
+
+    texts = [f"{c['title']} — {c['content']}" for c in chunks]
+    embeddings = model.encode(texts, batch_size=32, show_progress_bar=True, normalize_embeddings=True)
+
+    with conn.cursor() as cur:
+        for chunk, vec in tqdm(zip(chunks, embeddings), total=len(chunks), desc="Saving chunks"):
+            cur.execute(
+                "UPDATE knowledge_chunks SET embedding = %s WHERE id = %s",
+                (vec.tolist(), str(chunk["id"])),
+            )
+    conn.commit()
+    print(f"Done — {len(chunks)} chunk embeddings stored.")
+
+
 def run():
     print(f"Loading model: {MODEL_NAME}")
     model = SentenceTransformer(MODEL_NAME)
@@ -91,6 +116,8 @@ def run():
                 )
         conn.commit()
         print(f"Done — {len(animals)} embeddings stored.")
+
+        _embed_knowledge_chunks(conn, model)
 
     finally:
         conn.close()
