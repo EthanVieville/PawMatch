@@ -24,6 +24,8 @@ async def lifespan(app: FastAPI):
         "bedrock-runtime",
         region_name=os.getenv("AWS_REGION", "eu-west-1"),
     )
+    from chat import _get_encoder
+    _get_encoder()  # pre-load embedding model so first request isn't slow
     yield
 
 
