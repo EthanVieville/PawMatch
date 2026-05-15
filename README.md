@@ -48,48 +48,52 @@ Les scrapers + embedder seront bien entendu automatisés via CRON pour s'exécut
 ## Prérequis
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et démarré
-- Un fichier `.env` à la racine (voir section Variables d'environnement)
-- C'est okay bb.
+- Un fichier `.env` à la racine (voir section Variables d'environnement). Ce file n'est évidemment pas sur le github espèce de vilain méchant garçon, demande si tu le veux le prix c'est un gros bizou
+- C'est tout.
 
 ---
 
 ## Lancer le projet
 
-### Première fois (ou après un changement important de code)
+Toutes les commandes passent par `pawmatch.sh`. Fonctionne partout — PowerShell, Git Bash, EC2 :
 
 ```bash
-# 1. Build et démarrage du stack principal
-docker compose up --build -d
-
-# 2. Peupler la knowledge base (process d'adoption, conseils soins, infos refuges)
-docker compose --profile seeder run --rm seeder
-
-# 3. Calculer les embeddings (animaux + knowledge base)
-docker compose --profile embedder run --rm embedder
+bash pawmatch.sh <commande>
 ```
 
-### Démarrage rapide (aucun changement de code, données déjà en base)
+### Commandes disponibles
+
+| Commande | Description |
+|----------|-------------|
+| `setup` | **Première installation** — build les images, démarre le stack, seed la knowledge base, calcule les embeddings |
+| `start` | Démarrage rapide (données déjà en base, pas de rebuild) |
+| `stop` | Arrêter le stack (données conservées) |
+| `reset` | ⚠️ Arrêter + supprimer la base de données |
+| `deploy` | Rebuild les images et redémarre après un changement de code |
+| `data` | Rafraîchir les animaux — scrapers La SPA + Seconde Chance + embeddings |
+| `knowledge` | Mettre à jour la knowledge base du chatbot + embeddings |
+| `logs` | Voir les logs en direct |
+| `status` | État des services |
+
+### Exemples
 
 ```bash
-docker compose up -d
+# Première fois
+bash pawmatch.sh setup
+
+# Après un git pull sur l'EC2
+bash pawmatch.sh deploy
+
+# Rafraîchir les données animaux
+bash pawmatch.sh data
+
+# Voir ce qui tourne
+bash pawmatch.sh status
 ```
 
-### Arrêter (données conservées)
+> ⚠️ `reset` supprime le volume PostgreSQL. Toutes les données scrapées sont perdues.
 
-```bash
-docker compose down
-```
-
-### Arrêter ET supprimer la base de données
-
-```bash
-docker compose down -v
-```
-
-> ⚠️ Le `-v` supprime le volume PostgreSQL. Toutes les données scrapées sont perdues.  
-> À utiliser uniquement pour repartir de zéro.
-
-Une fois lancé :
+Une fois lancé (en local) :
 
 | Service | URL |
 |---------|-----|
