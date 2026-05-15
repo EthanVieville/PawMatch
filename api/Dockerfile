@@ -3,6 +3,8 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY requirements.txt .
+# Install CPU-only torch first — avoids pulling multi-GB CUDA libraries (no GPU on EC2)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Pre-download embedding model to avoid cold start latency on first request
