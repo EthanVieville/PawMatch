@@ -287,6 +287,192 @@ CHUNKS = [
             "Chaque fiche animal sur PawMatch indique l'association responsable et un lien direct vers l'annonce originale sur Seconde Chance."
         ),
     },
+
+    # ─── Post-adoption & intégration ─────────────────────────────────────────
+    {
+        "category": "care_advice",
+        "source": "general",
+        "title": "La période d'intégration — les premières semaines avec un nouvel animal",
+        "content": (
+            "Les premières semaines après l'adoption sont cruciales pour l'animal et pour vous. "
+            "La règle des 3-3-3 est un bon repère :\n\n"
+            "- Les 3 premiers jours : l'animal est désorienté, stressé, peut refuser de manger ou se cacher. C'est normal.\n"
+            "- Les 3 premières semaines : il commence à comprendre la routine, les règles, les personnalités du foyer.\n"
+            "- Les 3 premiers mois : il se sent 'chez lui', sa vraie personnalité émerge.\n\n"
+            "Ce qu'il faut faire :\n"
+            "- Créer un espace refuge (panier, caisse de transport ouverte) où l'animal peut se retirer.\n"
+            "- Maintenir une routine stable (repas, sorties, coucher aux mêmes horaires).\n"
+            "- Limiter les visites de personnes extérieures les premiers jours.\n"
+            "- Ne pas forcer le contact — laissez l'animal faire le premier pas.\n\n"
+            "Ce qu'il ne faut pas faire :\n"
+            "- Laisser l'animal seul de longues heures dès les premiers jours.\n"
+            "- Changer brutalement son alimentation (si vous changez de croquettes, faites-le progressivement sur 7-10 jours).\n"
+            "- Punir les accidents ou les comportements indésirables liés au stress."
+        ),
+    },
+    {
+        "category": "care_advice",
+        "source": "general",
+        "title": "Introduire un animal à des enfants — conseils et précautions",
+        "content": (
+            "L'arrivée d'un animal dans un foyer avec enfants demande une préparation pour garantir la sécurité de tous.\n\n"
+            "Avant l'arrivée :\n"
+            "- Expliquer aux enfants les règles de base : ne pas déranger l'animal quand il mange ou dort, "
+            "ne pas le forcer à interagir, ne jamais le tirer par la queue ou les oreilles.\n"
+            "- Choisir un animal au profil adapté : certains refuges indiquent explicitement si l'animal est 'compatible enfants'.\n\n"
+            "Les premiers jours :\n"
+            "- Superviser toutes les interactions entre l'animal et les jeunes enfants (moins de 8 ans).\n"
+            "- Laisser l'animal s'approcher des enfants à son rythme, pas l'inverse.\n"
+            "- Créer un espace que l'animal peut rejoindre et où les enfants n'ont pas accès (pour qu'il puisse se reposer).\n\n"
+            "Signaux d'alerte à surveiller chez l'animal :\n"
+            "- Grognements, oreilles aplaties, queue basse ou entre les pattes.\n"
+            "- Corps rigide, regard fixe, poils hérissés.\n"
+            "- Ces signaux indiquent que l'animal est mal à l'aise — arrêtez l'interaction immédiatement.\n\n"
+            "Sur le long terme, un animal élevé avec des enfants respectueux devient souvent leur meilleur ami."
+        ),
+    },
+    {
+        "category": "care_advice",
+        "source": "general",
+        "title": "Introduire un nouvel animal à un animal déjà présent au foyer",
+        "content": (
+            "L'introduction d'un nouvel animal dans un foyer où vit déjà un animal est une étape délicate qui demande de la patience.\n\n"
+            "Chien + chien :\n"
+            "- Première rencontre en terrain neutre (parc, rue) et non à la maison.\n"
+            "- Laissez-les se renifler mutuellement, en laisse détendue, sans forcer le contact.\n"
+            "- À la maison, nourrissez-les dans des pièces séparées les premiers jours.\n"
+            "- Prévoyez une période de supervision de 2 à 4 semaines.\n\n"
+            "Chat + chat :\n"
+            "- Isolez le nouveau chat dans une pièce dédiée avec sa litière, sa gamelle et son griffoir pendant 3 à 7 jours.\n"
+            "- Échangez les odeurs progressivement (couvertures, jouets).\n"
+            "- Organisez des rencontres visuelles à travers une porte entrouverte.\n"
+            "- La cohabitation complète peut prendre 2 à 6 semaines.\n\n"
+            "Chien + chat :\n"
+            "- Installez le chat dans une pièce inaccessible au chien au départ.\n"
+            "- Présentations progressives avec le chien en laisse.\n"
+            "- Assurez-vous que le chat peut toujours fuir et accéder à des zones en hauteur hors de portée du chien.\n\n"
+            "Ne précipitez jamais les présentations : une mauvaise première rencontre peut marquer les animaux durablement."
+        ),
+    },
+
+    # ─── Budget & pratique ────────────────────────────────────────────────────
+    {
+        "category": "adoption_process",
+        "source": "general",
+        "title": "Budget annuel pour un animal de compagnie — ce qu'il faut prévoir",
+        "content": (
+            "Adopter un animal, c'est aussi un engagement financier sur 10 à 15 ans. Voici les postes de dépenses à anticiper :\n\n"
+            "Pour un chien (taille moyenne) :\n"
+            "- Alimentation : 600–1 200 €/an (croquettes qualité moyenne à bonne)\n"
+            "- Vétérinaire courant (vaccins, antiparasitaires) : 200–400 €/an\n"
+            "- Toilettage (selon la race) : 0–600 €/an\n"
+            "- Accessoires, jouets, renouvellement : 100–300 €/an\n"
+            "- Garde/pension pendant les vacances : 200–600 €/an\n"
+            "- Assurance santé (optionnelle) : 200–600 €/an\n"
+            "- Total estimé : 1 300–3 100 €/an, soit 110–260 €/mois\n\n"
+            "Pour un chat :\n"
+            "- Alimentation : 300–700 €/an\n"
+            "- Vétérinaire courant : 150–300 €/an\n"
+            "- Litière : 100–200 €/an\n"
+            "- Accessoires, jouets : 50–150 €/an\n"
+            "- Total estimé : 600–1 350 €/an, soit 50–115 €/mois\n\n"
+            "Pour un lapin :\n"
+            "- Alimentation (foin, légumes, granulés) : 200–400 €/an\n"
+            "- Vétérinaire courant (vaccins obligatoires) : 100–200 €/an\n"
+            "- Litière, accessoires : 100–200 €/an\n"
+            "- Total estimé : 400–800 €/an, soit 35–65 €/mois\n\n"
+            "Imprévus : prévoyez une épargne d'urgence vétérinaire de 500–1 000 €. "
+            "Une chirurgie ou hospitalisation peut coûter entre 500 et 5 000 €."
+        ),
+    },
+    {
+        "category": "adoption_process",
+        "source": "general",
+        "title": "Peut-on adopter si on est locataire ?",
+        "content": (
+            "Oui, il est tout à fait possible d'adopter un animal quand on est locataire, mais quelques points sont à vérifier.\n\n"
+            "Ce que dit la loi :\n"
+            "- La loi française interdit aux propriétaires d'inclure une clause de 'no pets' absolue dans un bail d'habitation.\n"
+            "- Cependant, un propriétaire peut s'opposer à la détention d'un animal 'dangereux' ou 'nuisible'.\n"
+            "- Les chats et la plupart des petits animaux (lapins, rongeurs) sont généralement tolérés.\n"
+            "- Pour les chiens, surtout les grandes races, il est recommandé d'obtenir l'accord écrit du propriétaire.\n\n"
+            "Démarche recommandée :\n"
+            "- Informez votre propriétaire ou votre gestionnaire avant l'adoption.\n"
+            "- Obtenez une confirmation écrite (email suffit) pour éviter tout litige ultérieur.\n"
+            "- Certains refuges exigent cette autorisation comme condition d'adoption pour les chiens.\n\n"
+            "En copropriété :\n"
+            "- Le règlement de copropriété peut encadrer la détention d'animaux (bruit, parties communes).\n"
+            "- Vérifiez le règlement avant d'adopter, notamment pour les chiens de grande taille."
+        ),
+    },
+
+    # ─── Comportement & éducation ─────────────────────────────────────────────
+    {
+        "category": "care_advice",
+        "source": "general",
+        "title": "Éduquer un chien adopté en refuge — les bases",
+        "content": (
+            "Un chien adopté en refuge peut avoir des lacunes dans son éducation ou des traumatismes passés. "
+            "Voici les principes clés pour une éducation positive.\n\n"
+            "Les fondamentaux :\n"
+            "- Toujours privilégier le renforcement positif (récompense quand le comportement est bon) "
+            "plutôt que la punition (qui génère stress et peur).\n"
+            "- Être cohérent : les mêmes règles doivent s'appliquer par tous les membres du foyer.\n"
+            "- Courtes séances de 5 à 10 minutes, plusieurs fois par jour — le chien se lasse vite.\n\n"
+            "Apprentissages essentiels :\n"
+            "- La propreté : sorties régulières (toutes les 2-3 heures au début), féliciter immédiatement après chaque réussite dehors.\n"
+            "- La solitude : habituer progressivement le chien à rester seul (commencer par 5 minutes, augmenter graduellement).\n"
+            "- Les ordres de base : assis, couché, rappel, marche en laisse — fondamentaux pour la sécurité.\n\n"
+            "Quand consulter un professionnel :\n"
+            "- Agressivité, morsures, peurs invalidantes, anxiété de séparation sévère.\n"
+            "- Un éducateur canin comportementaliste (certifié CCPDT ou IAABC) peut aider.\n"
+            "- Certains refuges SPA proposent des séances de suivi comportemental post-adoption."
+        ),
+    },
+    {
+        "category": "care_advice",
+        "source": "general",
+        "title": "Quel animal adopter selon son mode de vie ?",
+        "content": (
+            "Le choix de l'animal doit correspondre à votre mode de vie. Voici un guide pratique.\n\n"
+            "Vous êtes actif, vous aimez le sport et les grands espaces :\n"
+            "→ Chien de taille moyenne à grande (Labrador, Berger, Husky). Besoin d'exercice intense quotidien.\n\n"
+            "Vous vivez en appartement, travaillez à domicile ou avez un rythme calme :\n"
+            "→ Chat adulte, ou chien de petite race (Carlin, Bichon, Shih Tzu). Évitez les races très énergiques.\n\n"
+            "Vous avez peu de temps mais voulez de la compagnie :\n"
+            "→ Chat adulte ou senior. Indépendant, n'a pas besoin de sorties, s'adapte à un foyer calme.\n\n"
+            "Vous cherchez un premier animal, débutant :\n"
+            "→ Chat adulte (plus indépendant qu'un chiot), lapin (relation affectueuse et gestion simple). "
+            "Évitez les races de chiens à fort caractère ou très énergiques pour une première adoption.\n\n"
+            "Vous avez des enfants en bas âge :\n"
+            "→ Races réputées douces (Golden Retriever, Labrador, Cavalier King Charles pour les chiens). "
+            "Toujours superviser les interactions avec les enfants de moins de 8 ans.\n\n"
+            "Vous voyagez souvent :\n"
+            "→ Chat (plus tolérant à la solitude avec un double distributeur automatique de croquettes et eau). "
+            "Un chien nécessite une solution de garde fiable."
+        ),
+    },
+    {
+        "category": "care_advice",
+        "source": "general",
+        "title": "Gérer l'anxiété de séparation chez le chien",
+        "content": (
+            "L'anxiété de séparation est fréquente chez les chiens adoptés en refuge. "
+            "Ils ont souvent connu des abandons et la peur de la solitude est ancrée profondément.\n\n"
+            "Signes d'anxiété de séparation :\n"
+            "- Destructions (meubles, objets) uniquement en votre absence.\n"
+            "- Aboiements ou pleurs incessants quand vous partez.\n"
+            "- Accidents urinaires malgré une propreté acquise.\n"
+            "- Comportement frénétique à votre retour (agitation extrême).\n\n"
+            "Comment y remédier progressivement :\n"
+            "1. Désensibilisation aux départs : mettez vos chaussures, prenez vos clés, restez — briser l'association départ = angoisse.\n"
+            "2. Absences très courtes au début (2 minutes), augmentées progressivement sur plusieurs semaines.\n"
+            "3. Enrichissement avant de partir : donner un Kong garni, un jouet interactif pour occuper l'esprit.\n"
+            "4. Ne pas saluer ou consoler avec emphase au départ et au retour — rester neutre pour dédramatiser.\n"
+            "5. En cas d'anxiété sévère, un vétérinaire peut prescrire un traitement d'appoint "
+            "et orienter vers un comportementaliste."
+        ),
+    },
 ]
 
 
