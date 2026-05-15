@@ -105,8 +105,7 @@ services:
   seeder:
     build:
       context: ./scripts
-      dockerfile: Dockerfile
-    command: python seed_knowledge.py
+      dockerfile: Dockerfile.seeder
     environment:
       - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
     depends_on:
