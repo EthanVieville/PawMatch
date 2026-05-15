@@ -123,3 +123,23 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/chat/test")
+def chat_test():
+    """Debug endpoint: verifies Bedrock connectivity and IAM credentials."""
+    import json as _json
+    from chat import BEDROCK_MODEL
+    try:
+        resp = app.state.bedrock.invoke_model(
+            modelId=BEDROCK_MODEL,
+            body=_json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 5,
+            }),
+        )
+        result = _json.loads(resp["body"].read())
+        return {"status": "ok", "model": BEDROCK_MODEL, "response": result}
+    except Exception as e:
+        return {"status": "error", "model": BEDROCK_MODEL, "detail": str(e), "type": type(e).__name__}
