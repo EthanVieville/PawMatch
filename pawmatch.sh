@@ -31,6 +31,13 @@ case "$1" in
     docker compose --profile scraper run --rm scraper-sc
     echo ">> Calcul des embeddings..."
     docker compose --profile embedder run --rm embedder
+    echo ">> Géocodage des refuges..."
+    docker compose --profile refuge-seeder run --build --rm refuge-seeder
+    echo "✓ Done."
+    ;;
+  refuges)
+    echo ">> Géocodage des refuges via Nominatim..."
+    docker compose --profile refuge-seeder run --build --rm refuge-seeder
     echo "✓ Done."
     ;;
   knowledge)
@@ -55,7 +62,8 @@ case "$1" in
     echo "  stop       Arrêter le stack"
     echo "  reset      Tout effacer (DB comprise)"
     echo "  deploy     Rebuild après changement de code"
-    echo "  data       Rafraîchir les animaux (scraping + embeddings)"
+    echo "  data       Rafraîchir les animaux (scraping + embeddings + refuges)"
+    echo "  refuges    Géocoder les refuges via Nominatim (map)"
     echo "  knowledge  Mettre à jour la knowledge base du chatbot"
     echo "  logs       Logs en direct"
     echo "  status     État des services"

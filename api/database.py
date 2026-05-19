@@ -5,6 +5,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
     Column,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -79,6 +80,17 @@ class KnowledgeChunk(Base):
     content = Column(Text, nullable=False)
     embedding = Column(Vector(384), nullable=True)
     created_at = Column(TIMESTAMP, server_default="NOW()")
+
+
+class Refuge(Base):
+    __tablename__ = "refuges"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, unique=True, nullable=False)
+    source = Column(String)
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    geocoded_at = Column(TIMESTAMP, nullable=True)
 
 
 def init_db():

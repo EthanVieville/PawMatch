@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from chat import stream_chat
-from database import Animal, get_db, init_db
+from database import Animal, Refuge, get_db, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,15 @@ def health(db: Session = Depends(get_db)):
         return {"status": "ok", "db": "connected"}
     except Exception as e:
         return {"status": "degraded", "db": "unavailable", "detail": str(e)}
+
+
+@app.get("/refuges")
+def list_refuges(db: Session = Depends(get_db)):
+    refuges = db.query(Refuge).filter(Refuge.lat.isnot(None)).all()
+    return [
+        {"name": r.name, "source": r.source, "lat": r.lat, "lng": r.lng}
+        for r in refuges
+    ]
 
 
 @app.get("/animals")
