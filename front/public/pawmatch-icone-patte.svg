@@ -1,0 +1,16 @@
+<svg width="72" height="82" viewBox="0 0 72 82" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c8682a"/>
+      <stop offset="100%" stop-color="#8a3e0e"/>
+    </linearGradient>
+  </defs>
+  <!-- 3 coussinets -->
+  <ellipse cx="16" cy="22" rx="10" ry="8.5" fill="url(#pg)"/>
+  <ellipse cx="36" cy="14" rx="10" ry="8.5" fill="url(#pg)"/>
+  <ellipse cx="56" cy="22" rx="10" ry="8.5" fill="url(#pg)"/>
+  <!-- Coussin principal -->
+  <ellipse cx="36" cy="54" rx="26" ry="22" fill="url(#pg)"/>
+  <!-- Reflet centré -->
+  <ellipse cx="36" cy="47" rx="11" ry="6.5" fill="white" opacity="0.15"/>
+</svg>

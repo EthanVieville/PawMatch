@@ -79,15 +79,43 @@ def list_refuges(db: Session = Depends(get_db)):
 @app.get("/animals")
 def list_animals(
     species: Optional[str] = None,
+    sex: Optional[str] = None,
+    age_min: Optional[int] = None,
+    age_max: Optional[int] = None,
+    refuge: Optional[str] = None,
     source: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    limit: int = 25,
     db: Session = Depends(get_db),
 ):
     query = db.query(Animal)
     if species:
         query = query.filter(Animal.species == species)
+    if sex:
+        query = query.filter(Animal.sex == sex)
+    if age_min is not None:
+        query = query.filter(Animal.age >= age_min)
+    if age_max is not None:
+        query = query.filter(Animal.age <= age_max)
+    if refuge:
+        query = query.filter(Animal.refuge.ilike(f"%{refuge}%"))
     if source:
         query = query.filter(Animal.source == source)
-    return [_animal_to_dict(a) for a in query.all()]
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            (Animal.name.ilike(term)) | (Animal.description.ilike(term))
+        )
+    total = query.count()
+    offset = (page - 1) * limit
+    items = query.order_by(Animal.scraped_at.desc()).offset(offset).limit(limit).all()
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "items": [_animal_to_dict(a) for a in items],
+    }
 
 
 @app.get("/animals/{animal_id}")

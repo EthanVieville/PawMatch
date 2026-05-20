@@ -1,0 +1,25 @@
+<svg width="520" height="100" viewBox="0 0 520 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c8682a"/>
+      <stop offset="100%" stop-color="#8a3e0e"/>
+    </linearGradient>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Anton&amp;display=swap');
+    </style>
+  </defs>
+  <!-- Fond sable -->
+  <rect width="520" height="100" fill="#e8dcc8" rx="12"/>
+  <!-- Patte -->
+  <ellipse cx="16" cy="30" rx="10" ry="8.5" fill="url(#pg)"/>
+  <ellipse cx="36" cy="22" rx="10" ry="8.5" fill="url(#pg)"/>
+  <ellipse cx="56" cy="30" rx="10" ry="8.5" fill="url(#pg)"/>
+  <ellipse cx="36" cy="62" rx="26" ry="22" fill="url(#pg)"/>
+  <ellipse cx="36" cy="55" rx="11" ry="6.5" fill="white" opacity="0.15"/>
+  <!-- Texte PAW -->
+  <text x="82" y="86" font-family="Anton, Impact, sans-serif" font-size="80" fill="#2e2416" letter-spacing="1">PAW</text>
+  <!-- Texte MATCH -->
+  <text x="272" y="86" font-family="Anton, Impact, sans-serif" font-size="80" fill="#c8682a" letter-spacing="1">MATCH</text>
+  <!-- Ligne déco -->
+  <rect x="82" y="91" width="430" height="3" rx="1" fill="#c8682a" opacity="0.7"/>
+</svg>

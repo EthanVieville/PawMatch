@@ -257,11 +257,18 @@ export default function ChatWidget() {
       {/* Floating button */}
       <button
         onClick={() => setIsOpen(prev => !prev)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-lg text-white text-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
-        style={{ background: '#10b981' }}
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+        style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.35))' }}
         aria-label="Ouvrir PawBuddy"
       >
-        {isOpen ? '×' : '🐾'}
+        {isOpen ? (
+          <span
+            className="w-14 h-14 rounded-full flex items-center justify-center text-white text-2xl leading-none"
+            style={{ background: 'var(--nav)' }}
+          >×</span>
+        ) : (
+          <img src="/pawmatch-icone-cube.svg" alt="" className="w-14 h-14" />
+        )}
       </button>
     </>
   )
