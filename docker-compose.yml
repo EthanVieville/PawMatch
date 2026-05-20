@@ -114,5 +114,19 @@ services:
     profiles:
       - seeder
 
+  # ── Refuge Seeder (géocodage Nominatim — après chaque scraping) ──────────
+  # docker compose --profile refuge-seeder run --rm refuge-seeder
+  refuge-seeder:
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile.refuge-seeder
+    environment:
+      - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - refuge-seeder
+
 volumes:
   postgres_data:
