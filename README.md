@@ -10,7 +10,7 @@ Plateforme d'aide à l'adoption d'animaux boostée par l'IA générative.
 front/        → Site web Next.js 14 (TypeScript, Tailwind CSS)
 api/          → API REST FastAPI (Python) — lit la base de données + chatbot LLM
 scraper/      → Collecte multi-sources (la-spa.fr + secondechance.org) → écrit en PostgreSQL
-scripts/      → Calcul des embeddings (sentence-transformers + pgvector) + seed knowledge base
+scripts/      → Embeddings (sentence-transformers + pgvector) + seed knowledge base + géocodage refuges
 dl_models/    → Modèle de classification PyTorch (en développement)
 ```
 
@@ -22,6 +22,8 @@ la-spa.fr  +  secondechance.org
   PostgreSQL + pgvector
        ↓  (scripts/embedder)
   Vecteurs de similarité (384 dims)
+       ↓  (scripts/seed_refuges — Nominatim)
+  Table refuges (lat/lng des refuges géocodés)
        ↓  (FastAPI)
   API REST  http://localhost:8000
        ↓  (Server Components Next.js)
@@ -70,7 +72,8 @@ bash pawmatch.sh <commande>
 | `stop` | Arrêter le stack (données conservées) |
 | `reset` | ⚠️ Arrêter + supprimer la base de données |
 | `deploy` | Rebuild les images et redémarre après un changement de code |
-| `data` | Rafraîchir les animaux — scrapers La SPA + Seconde Chance + embeddings |
+| `data` | Rafraîchir les animaux — scrapers La SPA + Seconde Chance + embeddings + géocodage refuges |
+| `refuges` | Géocoder les refuges via Nominatim (à relancer après `data` si nouveaux refuges) |
 | `knowledge` | Mettre à jour la knowledge base du chatbot + embeddings |
 | `logs` | Voir les logs en direct |
 | `status` | État des services |
@@ -157,6 +160,30 @@ docker compose --profile seeder run --rm seeder
 
 ---
 
+## Géocodage des refuges (carte interactive)
+
+Les coordonnées GPS des refuges sont calculées à partir de leur **nom** via l'API Nominatim (OpenStreetMap). Aucune clé API requise, gratuit, limité à 1 req/sec (ToS).
+
+```bash
+# Géocoder tous les refuges présents en base (idempotent — skipe les déjà trouvés)
+bash pawmatch.sh refuges
+
+# Ou manuellement :
+docker compose --profile refuge-seeder run --build --rm refuge-seeder
+```
+
+**Fonctionnement :**
+1. Récupère les noms de refuges distincts depuis la table `animals`
+2. Pour les refuges SPA (format `"La SPA - Refuge de VILLE – Sous-nom"`), extrait la ville avec un parser de noms
+3. Essaie plusieurs requêtes Nominatim par ordre de précision : nom complet → nom + France → ville extraite → ville alternative
+4. Insère les coordonnées dans la table `refuges` (ou `null` si non trouvé)
+
+**Taux de couverture observé :** ~51/76 refuges géocodés (67%). Les refuges SPA sont quasi-tous trouvés. Les petites associations secondechance.org sans indication géographique dans le nom ne sont pas trouvées — comportement attendu et non bloquant (pas de pin sur la map, rien de cassé).
+
+**Coût AWS :** zéro — Nominatim est externe et gratuit.
+
+---
+
 ## Calculer les embeddings (animaux similaires + RAG chatbot)
 
 Après chaque scraping ou modification de la knowledge base, relancer l'embedder :
@@ -206,6 +233,19 @@ Le projet utilise **PostgreSQL 16 + pgvector** via Docker.
 | `animal_id` | UUID | FK vers `animals` |
 | `url` | VARCHAR | URL de l'image (source originale) |
 | `position` | INTEGER | Ordre d'affichage |
+
+**`refuges`** — coordonnées GPS des refuges (géocodage Nominatim)
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| `id` | UUID | Identifiant |
+| `name` | VARCHAR | Nom du refuge (unique — même valeur que `animals.refuge`) |
+| `source` | VARCHAR | Source (`la-spa`, `secondechance`) |
+| `lat` | DOUBLE | Latitude (null si non trouvé) |
+| `lng` | DOUBLE | Longitude (null si non trouvé) |
+| `geocoded_at` | TIMESTAMP | Date du géocodage |
+
+Peuplée par `scripts/seed_refuges.py` via l'API Nominatim (OpenStreetMap). Idempotent : ne retente que les refuges sans coordonnées. Jointure avec `animals` sur le nom du refuge.
 
 **`knowledge_chunks`** — base de connaissances pour le chatbot RAG
 
@@ -267,7 +307,8 @@ Relancer le scraper met à jour les données existantes (upsert sur `source + so
 | `GET` | `/animals?source=la-spa` | Filtre par source |
 | `GET` | `/animals/{uuid}` | Fiche détaillée d'un animal |
 | `GET` | `/animals/{uuid}/similar` | Animaux similaires (recherche vectorielle) |
-| `POST` | `/chat` | Chatbot PawBuddy — streaming SSE (intent routing + RAG + Bedrock) |
+| `GET` | `/refuges` | Liste des refuges géocodés (lat/lng) pour la carte |
+| `POST` | `/chat` | Chatbot PawBuddy — streaming SSE (tool use + RAG + Bedrock) |
 
 Documentation interactive : http://localhost:8000/docs
 

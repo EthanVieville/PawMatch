@@ -2,34 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
-
 :root {
-  --primary: #10b981;
-  --primary-hover: #059669;
-  --secondary: #AB691B;
-  --secondary-hover:#965E20 ;
-  --bg: #f6f7fb;
+  --primary:      #6B7A58;
+  --primary-hover:#3D4A2E;
+  --accent:       #B5501A;
+  --accent-hover: #9A4218;
+  --nav:          #3D4A2E;
+  --bg:           #F0EAD6;
+  --card:         #FAF6EE;
+  --surface:      #E2D5BB;
+  --border:       #C8B99A;
+  --text:         #1C1C10;
+  --text-muted:   #6B6250;
 }
 
 body {
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: url('/pawmatch-fond-camo-sable.svg');
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-attachment: fixed;
+  color: var(--text);
 }
 
-/* 🔘 BUTTON SYSTEM */
+/* ── Typography ─────────────────────────────────────────────────────────── */
+
+.font-display {
+  font-family: var(--font-bebas), Impact, sans-serif;
+}
+
+/* ── Button system ──────────────────────────────────────────────────────── */
+
 .btn-primary {
-  @apply text-white px-6 py-3 rounded-xl transition;
+  @apply inline-flex items-center justify-center px-6 py-3 rounded-lg font-semibold tracking-wide transition-all duration-200 text-white;
   background-color: var(--primary);
 }
-
 .btn-primary:hover {
   background-color: var(--primary-hover);
+  @apply -translate-y-0.5 shadow-md;
+}
+
+.btn-accent {
+  @apply inline-flex items-center justify-center px-6 py-3 rounded-lg font-semibold tracking-wide transition-all duration-200 text-white;
+  background-color: var(--accent);
+}
+.btn-accent:hover {
+  background-color: var(--accent-hover);
+  @apply -translate-y-0.5 shadow-md;
 }
 
 .btn-secondary {
-  @apply text-white px-6 py-3 rounded-xl transition;
-  background-color: var(--secondary);
+  @apply inline-flex items-center justify-center px-6 py-3 rounded-lg font-semibold tracking-wide transition-all duration-200 text-white;
+  background-color: var(--text-muted);
+}
+.btn-secondary:hover {
+  background-color: var(--text);
 }
 
-.btn-secondary:hover {
-  background-color: var(--secondary-hover);
+/* ── Tag / badge ────────────────────────────────────────────────────────── */
+
+.tag {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  background-color: var(--surface);
+  color: var(--text);
 }
