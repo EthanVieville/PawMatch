@@ -180,8 +180,8 @@ def run():
                     lat, lng = result
                     print(f"→ {lat:.4f}, {lng:.4f}")
                     cur.execute("""
-                        INSERT INTO refuges (name, source, lat, lng, geocoded_at)
-                        VALUES (%s, %s, %s, %s, NOW())
+                        INSERT INTO refuges (id, name, source, lat, lng, geocoded_at)
+                        VALUES (gen_random_uuid(), %s, %s, %s, %s, NOW())
                         ON CONFLICT (name) DO UPDATE
                             SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, geocoded_at = NOW()
                     """, (name, source, lat, lng))
@@ -189,8 +189,8 @@ def run():
                 else:
                     print("→ not found")
                     cur.execute("""
-                        INSERT INTO refuges (name, source, geocoded_at)
-                        VALUES (%s, %s, NOW())
+                        INSERT INTO refuges (id, name, source, geocoded_at)
+                        VALUES (gen_random_uuid(), %s, %s, NOW())
                         ON CONFLICT (name) DO UPDATE SET geocoded_at = NOW()
                     """, (name, source))
                     not_found += 1
