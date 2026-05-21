@@ -13,6 +13,21 @@ export interface Refuge {
   thumbnails: string[]
 }
 
+export interface MapFilters {
+  species: string
+  sex: string
+  source: string
+}
+
+function buildLink(refugeName: string, filters: MapFilters): string {
+  const params = new URLSearchParams()
+  params.set('refuge', refugeName)
+  if (filters.species) params.set('species', filters.species)
+  if (filters.sex) params.set('sex', filters.sex)
+  if (filters.source) params.set('source', filters.source)
+  return `/animals?${params.toString()}`
+}
+
 function pawIcon(count: number) {
   return L.divIcon({
     className: '',
@@ -36,7 +51,7 @@ function pawIcon(count: number) {
   })
 }
 
-export default function MapClient({ refuges }: { refuges: Refuge[] }) {
+export default function MapClient({ refuges, filters = { species: '', sex: '', source: '' } }: { refuges: Refuge[]; filters?: MapFilters }) {
   return (
     <MapContainer
       center={[46.5, 2.3]}
@@ -86,9 +101,9 @@ export default function MapClient({ refuges }: { refuges: Refuge[] }) {
                 </div>
               )}
 
-              {/* Lien */}
+              {/* Lien avec filtres */}
               <Link
-                href={`/animals?refuge=${encodeURIComponent(r.name)}`}
+                href={buildLink(r.name, filters)}
                 style={{
                   display: 'block', textAlign: 'center',
                   background: '#B5501A', color: 'white',
