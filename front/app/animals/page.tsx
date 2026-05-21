@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import AnimalCard, { Animal } from '../../components/AnimalCard'
 
 type AnimalsResponse = {
@@ -19,7 +20,7 @@ const SPECIES = [
 
 const SEXES = [
   { value: '', label: 'Tous' },
-  { value: 'mâle', label: 'Mâle' },
+  { value: 'male', label: 'Mâle' },
   { value: 'femelle', label: 'Femelle' },
 ]
 
@@ -144,18 +145,29 @@ function Pagination({
   )
 }
 
-export default function AnimalsPage() {
+function AnimalsPageContent() {
+  const searchParams = useSearchParams()
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [species, setSpecies] = useState('')
   const [sex, setSex] = useState('')
   const [source, setSource] = useState('')
+  const [refuge, setRefuge] = useState(searchParams.get('refuge') ?? '')
+  const [refugesList, setRefugesList] = useState<string[]>([])
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(25)
   const [data, setData] = useState<AnimalsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [showTop, setShowTop] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Charger la liste des refuges pour le dropdown
+  useEffect(() => {
+    fetch('/api/refuges')
+      .then(r => r.json())
+      .then((d: { name: string }[]) => setRefugesList(d.map(r => r.name).sort()))
+      .catch(() => {})
+  }, [])
 
   // Debounce search → reset page
   useEffect(() => {
@@ -183,6 +195,7 @@ export default function AnimalsPage() {
     if (species) params.set('species', species)
     if (sex) params.set('sex', sex)
     if (source) params.set('source', source)
+    if (refuge) params.set('refuge', refuge)
     params.set('page', String(page))
     params.set('limit', String(limit))
 
@@ -192,7 +205,7 @@ export default function AnimalsPage() {
       .then(d => setData(d))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [debouncedSearch, species, sex, source, page, limit])
+  }, [debouncedSearch, species, sex, source, refuge, page, limit])
 
   const setFilterAndReset =
     (setter: (v: string) => void) => (v: string) => {
@@ -200,13 +213,14 @@ export default function AnimalsPage() {
       setPage(1)
     }
 
-  const hasFilters = search || species || sex || source
+  const hasFilters = search || species || sex || source || refuge
 
   const clearAll = () => {
     setSearch('')
     setSpecies('')
     setSex('')
     setSource('')
+    setRefuge('')
     setPage(1)
   }
 
@@ -341,6 +355,31 @@ export default function AnimalsPage() {
           ))}
         </div>
 
+        <div className="flex items-center gap-2">
+          <span
+            className="text-xs uppercase tracking-widest font-semibold"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            Refuge
+          </span>
+          <select
+            value={refuge}
+            onChange={e => setFilterAndReset(setRefuge)(e.target.value)}
+            className="text-sm rounded-lg px-2 py-1 border outline-none cursor-pointer"
+            style={{
+              background: refuge ? 'var(--primary)' : 'var(--card)',
+              borderColor: refuge ? 'var(--primary)' : 'var(--border)',
+              color: refuge ? 'white' : 'var(--text-muted)',
+              maxWidth: 220,
+            }}
+          >
+            <option value="">Tous les refuges</option>
+            {refugesList.map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
+
         {hasFilters && (
           <button
             onClick={clearAll}
@@ -410,5 +449,13 @@ export default function AnimalsPage() {
         </button>
       )}
     </main>
+  )
+}
+
+export default function AnimalsPage() {
+  return (
+    <Suspense>
+      <AnimalsPageContent />
+    </Suspense>
   )
 }
