@@ -113,7 +113,12 @@ def health(db: Session = Depends(get_db)):
 
 
 @app.get("/refuges")
-def list_refuges(db: Session = Depends(get_db)):
+def list_refuges(
+    species: Optional[str] = None,
+    sex: Optional[str] = None,
+    source: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
     from sqlalchemy import func
     from sqlalchemy.orm import joinedload
     from collections import defaultdict
@@ -124,19 +129,28 @@ def list_refuges(db: Session = Depends(get_db)):
 
     names = [r.name for r in refuges]
 
-    # 1 requête : counts groupés par refuge
+    # Base query for animals — apply optional filters
+    def _base(q):
+        q = q.filter(Animal.refuge.in_(names))
+        if species:
+            q = q.filter(Animal.species == species)
+        if sex:
+            q = q.filter(Animal.sex == sex)
+        if source:
+            q = q.filter(Animal.source == source)
+        return q
+
+    # 1 requête : counts groupés par refuge (filtrés)
     counts: dict[str, int] = dict(
-        db.query(Animal.refuge, func.count(Animal.id))
-        .filter(Animal.refuge.in_(names))
+        _base(db.query(Animal.refuge, func.count(Animal.id)))
         .group_by(Animal.refuge)
         .all()
     )
 
-    # 1-2 requêtes : animaux + images en eager load (joinedload évite le N+1)
+    # 1-2 requêtes : animaux + images en eager load (filtrés)
     animals = (
-        db.query(Animal)
+        _base(db.query(Animal))
         .options(joinedload(Animal.images))
-        .filter(Animal.refuge.in_(names))
         .all()
     )
 
@@ -145,17 +159,22 @@ def list_refuges(db: Session = Depends(get_db)):
         if a.refuge and a.images and len(thumbnails[a.refuge]) < 3:
             thumbnails[a.refuge].append(a.images[0].url)
 
-    return [
-        {
+    has_filter = bool(species or sex or source)
+    result = []
+    for r in refuges:
+        count = counts.get(r.name, 0)
+        # Quand des filtres sont actifs, exclure les refuges sans animal correspondant
+        if has_filter and count == 0:
+            continue
+        result.append({
             "name": r.name,
             "source": r.source,
             "lat": r.lat,
             "lng": r.lng,
-            "animal_count": counts.get(r.name, 0),
+            "animal_count": count,
             "thumbnails": thumbnails.get(r.name, []),
-        }
-        for r in refuges
-    ]
+        })
+    return result
 
 
 @app.get("/animals")

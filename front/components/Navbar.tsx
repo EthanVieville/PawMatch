@@ -66,8 +66,8 @@ export default function Navbar() {
         <div
           style={{
             background: '#E2D5BB',
-            paddingBottom: scrolled ? '0px' : '36px',
-            clipPath: scrolled ? FLAT_CLIP : WAVE_CLIP,
+            paddingBottom: scrolled || pathname === '/map' ? '0px' : '36px',
+            clipPath: scrolled || pathname === '/map' ? FLAT_CLIP : WAVE_CLIP,
             transition: 'clip-path 0.4s ease, padding-bottom 0.4s ease',
           }}
         >
