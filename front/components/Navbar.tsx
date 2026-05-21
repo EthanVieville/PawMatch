@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -9,8 +9,6 @@ const LINKS = [
   { href: '/map',     label: 'Carte' },
 ];
 
-// 15 dents régulières — le fond camo se termine en zigzag Y2K
-// La zone de contenu occupe 72% de la hauteur, la vague les 28% restants
 const WAVE_CLIP =
   'polygon(0% 0%, 100% 0%, 100% 72%,' +
   '96.67% 100%, 93.33% 72%,' +
@@ -29,23 +27,48 @@ const WAVE_CLIP =
   '10% 100%, 6.67% 72%,' +
   '3.33% 100%, 0% 72%)';
 
+// Même nombre de sommets que WAVE_CLIP pour permettre l'interpolation CSS
+const FLAT_CLIP =
+  'polygon(0% 0%, 100% 0%, 100% 100%,' +
+  '96.67% 100%, 93.33% 100%,' +
+  '90% 100%, 86.67% 100%,' +
+  '83.33% 100%, 80% 100%,' +
+  '76.67% 100%, 73.33% 100%,' +
+  '70% 100%, 66.67% 100%,' +
+  '63.33% 100%, 60% 100%,' +
+  '56.67% 100%, 53.33% 100%,' +
+  '50% 100%, 46.67% 100%,' +
+  '43.33% 100%, 40% 100%,' +
+  '36.67% 100%, 33.33% 100%,' +
+  '30% 100%, 26.67% 100%,' +
+  '23.33% 100%, 20% 100%,' +
+  '16.67% 100%, 13.33% 100%,' +
+  '10% 100%, 6.67% 100%,' +
+  '3.33% 100%, 0% 100%)';
+
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > 60);
+    window.addEventListener('scroll', fn, { passive: true });
+    return () => window.removeEventListener('scroll', fn);
+  }, []);
 
   return (
     <div className="sticky top-0 z-50">
 
       {/* ── Barre principale avec vague ──────────────────────────────────── */}
       {/* drop-shadow sur le parent, clip-path sur l'enfant */}
-      <div style={{ filter: 'drop-shadow(0 8px 14px rgba(0,0,0,0.45))' }}>
+      <div style={{ filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.3))' }}>
         <div
           style={{
-            backgroundImage: "url('/camo_kaki.jpg')",
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            paddingBottom: '36px',   /* espace pour la zone de vague */
-            clipPath: WAVE_CLIP,
+            background: '#E2D5BB',
+            paddingBottom: scrolled ? '0px' : '36px',
+            clipPath: scrolled ? FLAT_CLIP : WAVE_CLIP,
+            transition: 'clip-path 0.4s ease, padding-bottom 0.4s ease',
           }}
         >
           <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
@@ -53,10 +76,10 @@ export default function Navbar() {
             {/* Logo */}
             <Link href="/">
               <img
-                src="/pawmatch-logo-navbar.svg"
+                src="/pawmatch-logo.png"
                 alt="PawMatch"
-                className="h-12 w-auto"
-                style={{ filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6))' }}
+                className="h-14 w-auto"
+                style={{ mixBlendMode: 'multiply' }}
               />
             </Link>
 
@@ -68,10 +91,14 @@ export default function Navbar() {
                   href={href}
                   className={`text-sm font-semibold uppercase tracking-widest transition-colors ${
                     pathname === href
-                      ? 'text-white border-b-2 border-white pb-0.5'
-                      : 'text-white/70 hover:text-white'
+                      ? 'border-b-2 pb-0.5'
+                      : 'hover:opacity-100'
                   }`}
-                  style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
+                  style={
+                    pathname === href
+                      ? { color: '#3D4A2E', borderColor: '#3D4A2E' }
+                      : { color: '#6B6250' }
+                  }
                 >
                   {label}
                 </Link>
@@ -83,7 +110,8 @@ export default function Navbar() {
 
             {/* Hamburger mobile */}
             <button
-              className="md:hidden text-white p-1"
+              className="md:hidden p-1"
+              style={{ color: '#3D4A2E' }}
               onClick={() => setOpen(!open)}
               aria-label="Menu"
             >
@@ -104,10 +132,8 @@ export default function Navbar() {
         <div
           className="md:hidden px-6 py-4 flex flex-col gap-4 border-t"
           style={{
-            backgroundImage: "url('/camo_kaki.jpg')",
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            borderColor: 'rgba(255,255,255,0.15)',
+            background: '#E2D5BB',
+            borderColor: 'rgba(61,74,46,0.2)',
             marginTop: '-1px',
           }}
         >
@@ -115,8 +141,8 @@ export default function Navbar() {
             <Link
               key={href}
               href={href}
-              className="text-white/80 hover:text-white font-semibold uppercase tracking-widest text-sm"
-              style={{ textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}
+              className="font-semibold uppercase tracking-widest text-sm hover:opacity-70 transition-opacity"
+              style={{ color: '#6B6250' }}
               onClick={() => setOpen(false)}
             >
               {label}
