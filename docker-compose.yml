@@ -31,6 +31,10 @@ services:
       # En local uniquement — sur EC2 le IAM role prend le relais, pas besoin de ces vars
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      # Breed model — monté via volume, vide si non entraîné
+      - BREED_MODEL_PATH=/app/models/pet_model_best.pth
+    volumes:
+      - ./dl_models/utils/out:/app/models:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,6 +49,8 @@ services:
       - "3000:3000"
     environment:
       - API_URL=http://api:8000
+    volumes:
+      - ./front/public/uploads:/app/public/uploads
     depends_on:
       - api
     restart: unless-stopped

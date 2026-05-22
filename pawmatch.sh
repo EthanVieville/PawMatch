@@ -47,6 +47,11 @@ case "$1" in
     docker compose --profile embedder run --rm embedder
     echo "✓ Done."
     ;;
+  enrich)
+    echo ">> Enrichissement des races (DL — requiert Python local + modèle .pth)..."
+    python -m scripts.enrich_breeds
+    echo "✓ Done."
+    ;;
   logs)
     docker compose logs -f
     ;;
@@ -65,6 +70,7 @@ case "$1" in
     echo "  data       Rafraîchir les animaux (scraping + embeddings + refuges)"
     echo "  refuges    Géocoder les refuges via Nominatim (map)"
     echo "  knowledge  Mettre à jour la knowledge base du chatbot"
+    echo "  enrich     Enrichir les races avec le classifieur DL (local uniquement)"
     echo "  logs       Logs en direct"
     echo "  status     État des services"
     echo ""
