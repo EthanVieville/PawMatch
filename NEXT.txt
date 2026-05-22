@@ -1,0 +1,8 @@
+- Peaufiner le LLMops et autres features du genre
+- docs de LLMops et autres features
+- schéma des services Docker 
+- schéma des données
+- schéma du AWS
+- uniformiser la doc 
+- README à clean : ya trop d'infos, même si utiles, y'a des trucs à tej, surtou tles cmd docker, vu qu'on as le bash mtn
+- slide (jsp si il en faut ? mais ca servira le ppt final de façon)

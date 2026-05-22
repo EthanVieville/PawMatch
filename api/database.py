@@ -4,6 +4,7 @@ import uuid
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
+    Boolean,
     Column,
     Float,
     ForeignKey,
@@ -15,7 +16,7 @@ from sqlalchemy import (
     create_engine,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 DATABASE_URL = os.environ.get(
@@ -48,6 +49,7 @@ class Animal(Base):
     embedding = Column(Vector(384), nullable=True)
     race_predicted = Column(String, nullable=True)
     race_confidence = Column(Float, nullable=True)
+    description_rewritten = Column(Text, nullable=True)
 
     images = relationship(
         "AnimalImage",
@@ -95,6 +97,22 @@ class Refuge(Base):
     geocoded_at = Column(TIMESTAMP, nullable=True)
 
 
+class LLMTrace(Base):
+    __tablename__ = "llm_traces"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    feature = Column(String, nullable=False)      # chat | description_rewrite
+    model_id = Column(String, nullable=False)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    cost_usd = Column(Float, default=0.0)
+    latency_ms = Column(Integer, default=0)
+    tool_calls = Column(JSONB, nullable=True)      # [{"name": "search_animals", ...}]
+    rag_chunks_used = Column(Integer, default=0)
+    error = Column(Boolean, default=False)
+    created_at = Column(TIMESTAMP, server_default="NOW()")
+
+
 def init_db():
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -104,6 +122,9 @@ def init_db():
         ))
         conn.execute(text(
             "ALTER TABLE animals ADD COLUMN IF NOT EXISTS race_confidence FLOAT"
+        ))
+        conn.execute(text(
+            "ALTER TABLE animals ADD COLUMN IF NOT EXISTS description_rewritten TEXT"
         ))
         conn.commit()
     Base.metadata.create_all(engine)

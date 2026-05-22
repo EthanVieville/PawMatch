@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from admin import router as admin_router
 from chat import stream_chat, _get_encoder
 from database import Animal, AnimalImage, Refuge, get_db, init_db
 
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PawMatch API", lifespan=lifespan)
+app.include_router(admin_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -111,6 +113,7 @@ def _animal_to_dict(animal: Animal) -> dict:
         "images": [img.url for img in animal.images],
         "race_predicted": animal.race_predicted,
         "race_confidence": animal.race_confidence,
+        "description_rewritten": animal.description_rewritten,
     }
 
 
