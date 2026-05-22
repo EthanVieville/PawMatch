@@ -1,13 +1,61 @@
 import json
 import logging
 import os
+import time
 from typing import Generator, Optional
 
 from sqlalchemy.orm import Session
 
-from database import Animal, KnowledgeChunk
+from database import Animal, KnowledgeChunk, LLMTrace
 
 logger = logging.getLogger(__name__)
+
+# ── Pricing ($ per 1M tokens) ─────────────────────────────────────────────────
+
+_PRICING = {
+    "haiku":  (0.80,  4.00),
+    "sonnet": (3.00,  15.00),
+    "opus":   (15.00, 75.00),
+}
+
+
+def _compute_cost(model_id: str, input_tokens: int, output_tokens: int) -> float:
+    tier = next((k for k in _PRICING if k in model_id.lower()), "haiku")
+    inp, out = _PRICING[tier]
+    return (input_tokens * inp + output_tokens * out) / 1_000_000
+
+
+def _save_trace(
+    db: Session,
+    feature: str,
+    model_id: str,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: int,
+    tool_calls: list,
+    rag_chunks_used: int,
+    error: bool,
+) -> None:
+    try:
+        trace = LLMTrace(
+            feature=feature,
+            model_id=model_id,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=_compute_cost(model_id, input_tokens, output_tokens),
+            latency_ms=latency_ms,
+            tool_calls=tool_calls or None,
+            rag_chunks_used=rag_chunks_used,
+            error=error,
+        )
+        db.add(trace)
+        db.commit()
+    except Exception as exc:
+        logger.error("Failed to save LLM trace: %s", exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 BEDROCK_MODEL = os.getenv("BEDROCK_MODEL", "eu.anthropic.claude-haiku-4-5-20251001-v1:0")
 
@@ -262,6 +310,15 @@ def stream_chat(
     bedrock_client,
 ) -> Generator[str, None, None]:
 
+    _t = {
+        "start": time.time(),
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "tool_calls": [],
+        "rag_chunks": 0,
+        "error": False,
+    }
+
     messages = list(history[-6:])
 
     # Inject animal page context into the user message
@@ -273,39 +330,9 @@ def stream_chat(
         messages.append({"role": "user", "content": message})
 
     try:
-        # ── Step 1 : tool resolution (non-streaming) ──────────────────────────
-        resp = bedrock_client.invoke_model(
-            modelId=BEDROCK_MODEL,
-            body=json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "system": SYSTEM_PROMPT,
-                "messages": messages,
-                "tools": TOOLS,
-                "max_tokens": 1024,
-                "temperature": 0.7,
-            }),
-        )
-        result = json.loads(resp["body"].read())
-
-        if result.get("stop_reason") == "tool_use":
-            tool_uses = [b for b in result["content"] if b["type"] == "tool_use"]
-
-            # Append Claude's tool_use blocks to messages
-            messages.append({"role": "assistant", "content": result["content"]})
-
-            # Execute all requested tools
-            tool_results = [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": tu["id"],
-                    "content": _execute_tool(tu["name"], tu["input"], db),
-                }
-                for tu in tool_uses
-            ]
-            messages.append({"role": "user", "content": tool_results})
-
-            # ── Step 2 : final streaming response ─────────────────────────────
-            stream_resp = bedrock_client.invoke_model_with_response_stream(
+        try:
+            # ── Step 1 : tool resolution (non-streaming) ──────────────────────
+            resp = bedrock_client.invoke_model(
                 modelId=BEDROCK_MODEL,
                 body=json.dumps({
                     "anthropic_version": "bedrock-2023-05-31",
@@ -316,21 +343,84 @@ def stream_chat(
                     "temperature": 0.7,
                 }),
             )
-            for event in stream_resp["body"]:
-                chunk = json.loads(event["chunk"]["bytes"])
-                if chunk.get("type") == "content_block_delta":
-                    token = chunk["delta"].get("text", "")
-                    if token:
-                        yield f"data: {json.dumps({'token': token})}\n\n"
+            result = json.loads(resp["body"].read())
 
-        else:
-            # Claude answered directly without tools
-            text = "".join(b.get("text", "") for b in result["content"] if b["type"] == "text")
-            if text:
-                yield f"data: {json.dumps({'token': text})}\n\n"
+            usage = result.get("usage", {})
+            _t["input_tokens"] += usage.get("input_tokens", 0)
+            _t["output_tokens"] += usage.get("output_tokens", 0)
 
-    except Exception as e:
-        logger.error("Chat error: %s", e)
-        yield f"data: {json.dumps({'token': 'Désolé, une erreur est survenue. Veuillez réessayer.'})}\n\n"
+            if result.get("stop_reason") == "tool_use":
+                tool_uses = [b for b in result["content"] if b["type"] == "tool_use"]
 
-    yield "data: [DONE]\n\n"
+                for tu in tool_uses:
+                    _t["tool_calls"].append({"name": tu["name"], "input": tu["input"]})
+                    if tu["name"] == "search_knowledge":
+                        _t["rag_chunks"] += 4
+                    elif tu["name"] == "search_animals":
+                        _t["rag_chunks"] += 6
+
+                # Append Claude's tool_use blocks to messages
+                messages.append({"role": "assistant", "content": result["content"]})
+
+                # Execute all requested tools
+                tool_results = [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tu["id"],
+                        "content": _execute_tool(tu["name"], tu["input"], db),
+                    }
+                    for tu in tool_uses
+                ]
+                messages.append({"role": "user", "content": tool_results})
+
+                # ── Step 2 : final streaming response ─────────────────────────
+                stream_resp = bedrock_client.invoke_model_with_response_stream(
+                    modelId=BEDROCK_MODEL,
+                    body=json.dumps({
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "system": SYSTEM_PROMPT,
+                        "messages": messages,
+                        "tools": TOOLS,
+                        "max_tokens": 1024,
+                        "temperature": 0.7,
+                    }),
+                )
+                for event in stream_resp["body"]:
+                    chunk = json.loads(event["chunk"]["bytes"])
+                    chunk_type = chunk.get("type")
+                    if chunk_type == "message_start":
+                        u = chunk.get("message", {}).get("usage", {})
+                        _t["input_tokens"] += u.get("input_tokens", 0)
+                    elif chunk_type == "message_delta":
+                        _t["output_tokens"] += chunk.get("usage", {}).get("output_tokens", 0)
+                    elif chunk_type == "content_block_delta":
+                        token = chunk["delta"].get("text", "")
+                        if token:
+                            yield f"data: {json.dumps({'token': token})}\n\n"
+
+            else:
+                # Claude answered directly without tools
+                direct_text = "".join(b.get("text", "") for b in result["content"] if b["type"] == "text")
+                if direct_text:
+                    yield f"data: {json.dumps({'token': direct_text})}\n\n"
+
+        except Exception as e:
+            _t["error"] = True
+            logger.error("Chat error: %s", e)
+            yield f"data: {json.dumps({'token': 'Désolé, une erreur est survenue. Veuillez réessayer.'})}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    finally:
+        # Toujours tracé, même si le client ferme la connexion SSE avant la fin
+        _save_trace(
+            db=db,
+            feature="chat",
+            model_id=BEDROCK_MODEL,
+            input_tokens=_t["input_tokens"],
+            output_tokens=_t["output_tokens"],
+            latency_ms=int((time.time() - _t["start"]) * 1000),
+            tool_calls=_t["tool_calls"],
+            rag_chunks_used=_t["rag_chunks"],
+            error=_t["error"],
+        )
