@@ -46,6 +46,8 @@ class Animal(Base):
     incompatibilities = Column(ARRAY(String))
     scraped_at = Column(TIMESTAMP, server_default="NOW()")
     embedding = Column(Vector(384), nullable=True)
+    race_predicted = Column(String, nullable=True)
+    race_confidence = Column(Float, nullable=True)
 
     images = relationship(
         "AnimalImage",
@@ -94,9 +96,15 @@ class Refuge(Base):
 
 
 def init_db():
-    # L'extension vector doit exister avant que create_all crée la colonne embedding
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        # Migration safe : ajoute les colonnes si elles n'existent pas encore
+        conn.execute(text(
+            "ALTER TABLE animals ADD COLUMN IF NOT EXISTS race_predicted VARCHAR"
+        ))
+        conn.execute(text(
+            "ALTER TABLE animals ADD COLUMN IF NOT EXISTS race_confidence FLOAT"
+        ))
         conn.commit()
     Base.metadata.create_all(engine)
 

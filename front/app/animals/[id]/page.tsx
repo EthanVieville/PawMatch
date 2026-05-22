@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isVagueBreed } from "../../../lib/breed";
 import AnimalCard, { Animal } from "../../../components/AnimalCard";
 import AnimalGallery from "../../../components/AnimalGallery";
 
@@ -9,6 +10,7 @@ const API_URL = process.env.API_URL ?? "http://localhost:8000";
 const SOURCE_LABELS: Record<string, string> = {
   "la-spa":        "La SPA",
   "secondechance": "Seconde Chance",
+  "user":          "Particulier — PawMatch",
 };
 
 async function getAnimal(id: string): Promise<Animal | null> {
@@ -99,12 +101,27 @@ export default async function AnimalDetail({
                 <p className="font-semibold capitalize mt-0.5">{animal.species}</p>
               </div>
             )}
-            {animal.race && (
+            {animal.race && !isVagueBreed(animal.race) ? (
               <div>
                 <span className="text-xs uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Race</span>
                 <p className="font-semibold capitalize mt-0.5">{animal.race}</p>
               </div>
-            )}
+            ) : animal.race_predicted && (animal.race_confidence ?? 0) >= 0.65 ? (
+              <div>
+                <span className="text-xs uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Race</span>
+                {animal.race && (
+                  <p className="font-semibold capitalize mt-0.5" style={{ opacity: 0.6 }}>{animal.race}</p>
+                )}
+                <p className="capitalize mt-0.5 text-sm" style={{ color: "var(--text-muted)", fontStyle: "italic" }}>
+                  MAYBE ({Math.round(animal.race_confidence! * 100)}%) : {animal.race_predicted}
+                </p>
+              </div>
+            ) : animal.race ? (
+              <div>
+                <span className="text-xs uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Race</span>
+                <p className="font-semibold capitalize mt-0.5">{animal.race}</p>
+              </div>
+            ) : null}
             {animal.sex && (
               <div>
                 <span className="text-xs uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Sexe</span>
@@ -162,12 +179,14 @@ export default async function AnimalDetail({
             </div>
           )}
 
-          {/* CTA adoption */}
-          <a href={animal.source_url} target="_blank" rel="noopener noreferrer">
-            <button className="btn-accent w-full mt-2">
-              Voir la fiche d&apos;adoption →
-            </button>
-          </a>
+          {/* CTA adoption — masqué pour les annonces de particuliers */}
+          {animal.source !== "user" && (
+            <a href={animal.source_url} target="_blank" rel="noopener noreferrer">
+              <button className="btn-accent w-full mt-2">
+                Voir la fiche d&apos;adoption →
+              </button>
+            </a>
+          )}
 
         </div>
       </div>

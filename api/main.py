@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from chat import stream_chat, _get_encoder
-from database import Animal, Refuge, get_db, init_db
+from database import Animal, AnimalImage, Refuge, get_db, init_db
 
 # ── Synonym mapping pour la recherche intelligente ────────────────────────────
 _SPECIES_SYNONYMS: dict[str, str] = {
@@ -71,6 +71,15 @@ async def lifespan(app: FastAPI):
     )
     from chat import _get_encoder
     _get_encoder()  # pre-load embedding model so first request isn't slow
+    # Breed model — chargé uniquement si le fichier existe
+    from predict_breed import load_breed_model
+    app.state.breed_model = load_breed_model(
+        os.getenv("BREED_MODEL_PATH", "models/pet_model_best.pth")
+    )
+    if app.state.breed_model:
+        logger.info("Breed model loaded")
+    else:
+        logger.warning("Breed model not found — /predict-breed retournera 503")
     yield
 
 
@@ -100,6 +109,8 @@ def _animal_to_dict(animal: Animal) -> dict:
         "incompatibilities": animal.incompatibilities or [],
         "scraped_at": animal.scraped_at.isoformat() if animal.scraped_at else None,
         "images": [img.url for img in animal.images],
+        "race_predicted": animal.race_predicted,
+        "race_confidence": animal.race_confidence,
     }
 
 
@@ -303,3 +314,76 @@ def chat_test():
         return {"status": "ok", "model": BEDROCK_MODEL, "response": result}
     except Exception as e:
         return {"status": "error", "model": BEDROCK_MODEL, "detail": str(e), "type": type(e).__name__}
+
+# ── Création d'une annonce utilisateur ───────────────────────────────────────
+
+class AnimalCreate(BaseModel):
+    name: str
+    species: Optional[str] = None
+    race: Optional[str] = None
+    sex: Optional[str] = None
+    age: Optional[int] = None
+    description: Optional[str] = None
+    refuge: Optional[str] = None
+    incompatibilities: list[str] = []
+    image_urls: list[str] = []
+
+
+@app.post("/animals", status_code=201)
+def create_animal(body: AnimalCreate, db: Session = Depends(get_db)):
+    import uuid as _uuid
+    animal = Animal(
+        source="user",
+        source_url=f"user-{_uuid.uuid4()}",
+        name=body.name,
+        species=body.species,
+        race=body.race,
+        sex=body.sex,
+        age=body.age,
+        description=body.description,
+        refuge=body.refuge,
+        incompatibilities=body.incompatibilities or [],
+    )
+    # Embedding calculé depuis la description pour que le chatbot trouve l'animal
+    if body.description:
+        text_for_embed = " ".join(filter(None, [
+            body.name, body.species, body.race, body.description
+        ]))
+        animal.embedding = _get_encoder().encode(text_for_embed).tolist()
+
+    db.add(animal)
+    db.flush()
+    animal_id = animal.id  # capture before commit to avoid expiry issues
+
+    for i, url in enumerate(body.image_urls):
+        db.add(AnimalImage(animal_id=animal_id, url=url, position=i))
+
+    db.commit()
+
+    from sqlalchemy.orm import joinedload as _jl
+    animal = (
+        db.query(Animal)
+        .options(_jl(Animal.images))
+        .filter(Animal.id == animal_id)
+        .first()
+    )
+    return _animal_to_dict(animal)
+
+
+# ── Prédiction de race depuis une image (base64) ─────────────────────────────
+
+class PredictBreedRequest(BaseModel):
+    image_data: str  # base64
+
+
+@app.post("/predict-breed")
+def predict_breed(body: PredictBreedRequest):
+    model = getattr(app.state, "breed_model", None)
+    if model is None:
+        raise HTTPException(status_code=503, detail="Breed model not available")
+    from predict_breed import predict_from_base64
+    result = predict_from_base64(model, body.image_data)
+    if result is None:
+        raise HTTPException(status_code=400, detail="Image invalide ou illisible")
+    return result
+

@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { isVagueBreed } from "../lib/breed";
 
 export type Animal = {
   id: string;
   name: string;
   species: string | null;
   race: string | null;
+  race_predicted: string | null;
+  race_confidence: number | null;
   refuge: string | null;
   sex: string | null;
   age: number | null;
@@ -18,6 +21,7 @@ export type Animal = {
 const SOURCE_LABELS: Record<string, string> = {
   "la-spa":        "La SPA",
   "secondechance": "Seconde Chance",
+  "user":          "Particulier",
 };
 
 const SPECIES_EMOJI: Record<string, string> = {
@@ -82,9 +86,23 @@ export default function AnimalCard({ animal }: { animal: Animal }) {
               {animal.age} an{animal.age > 1 ? "s" : ""}
             </span>
           )}
-          {animal.race && (
+          {animal.race && !isVagueBreed(animal.race) ? (
             <span className="tag capitalize">{animal.race}</span>
-          )}
+          ) : animal.race_predicted && (animal.race_confidence ?? 0) >= 0.65 ? (
+            <>
+              {animal.race && (
+                <span className="tag capitalize" style={{ opacity: 0.6 }}>{animal.race}</span>
+              )}
+              <span
+                className="tag capitalize"
+                style={{ opacity: 0.75, fontStyle: "italic", borderStyle: "dashed" }}
+              >
+                MAYBE ({Math.round(animal.race_confidence! * 100)}%) : {animal.race_predicted}
+              </span>
+            </>
+          ) : animal.race ? (
+            <span className="tag capitalize">{animal.race}</span>
+          ) : null}
         </div>
 
         {/* Refuge */}
