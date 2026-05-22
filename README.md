@@ -11,7 +11,7 @@ front/        → Site web Next.js 14 (TypeScript, Tailwind CSS)
 api/          → API REST FastAPI (Python) — lit la base de données + chatbot LLM
 scraper/      → Collecte multi-sources (la-spa.fr + secondechance.org) → écrit en PostgreSQL
 scripts/      → Embeddings (sentence-transformers + pgvector) + seed knowledge base + géocodage refuges
-dl_models/    → Modèle de classification PyTorch (en développement)
+dl_models/    → Classifieur de race PyTorch (MobileNetV2, 37 races Oxford-IIIT Pet)
 ```
 
 ### Flux de données
@@ -24,6 +24,8 @@ la-spa.fr  +  secondechance.org
   Vecteurs de similarité (384 dims)
        ↓  (scripts/seed_refuges — Nominatim)
   Table refuges (lat/lng des refuges géocodés)
+       ↓  (scripts/enrich_breeds — PyTorch MobileNetV2)
+  race_predicted + race_confidence sur les animaux chien/chat
        ↓  (FastAPI)
   API REST  http://localhost:8000
        ↓  (Server Components Next.js)
@@ -76,6 +78,7 @@ bash pawmatch.sh <commande>
 | `refuges` | Géocoder les refuges via Nominatim (à relancer après `data` si nouveaux refuges) |
 | `knowledge` | Mettre à jour la knowledge base du chatbot + embeddings |
 | `logs` | Voir les logs en direct |
+| `enrich` | Enrichir les races avec le classifieur DL (exécution locale) |
 | `status` | État des services |
 
 ### Exemples
@@ -215,7 +218,9 @@ Le projet utilise **PostgreSQL 16 + pgvector** via Docker.
 | `source_url` | VARCHAR | URL de la fiche originale (clé d'upsert) |
 | `name` | VARCHAR | Nom de l'animal |
 | `species` | VARCHAR | Espèce (`chien`, `chat`, `lapin`, `octodon`…) |
-| `race` | VARCHAR | Race |
+| `race` | VARCHAR | Race (issue du scraping) |
+| `race_predicted` | VARCHAR | Race prédite par le classifieur DL |
+| `race_confidence` | FLOAT | Score de confiance du classifieur (0-1) |
 | `sex` | VARCHAR | `male` / `femelle` |
 | `birth_date` | VARCHAR | Date de naissance (format YYYY-MM-DD) |
 | `age` | INTEGER | Âge calculé en années |
@@ -265,7 +270,8 @@ La colonne `source` permet d'agréger plusieurs scrapers dans la même base sans
 
 ### URL Images
 
-Les images ne sont pas stockées ! Le lien est seulement récupéré de la source originale, puis affiché simplement.  
+Pour les animaux scraped (la-spa, secondechance), le champ `url` contient l’URL externe de la source d’origine.
+Pour les annonces déposées par des particuliers via `/post`, l’image est **compressée côté client** (Canvas API, max 600 px, JPEG 72 %) puis stockée directement en base comme **data URI base64**. Aucun stockage fichier, aucune dépendance S3, aucun problème de permissions Docker.
 Si on veut perdre du fric mais gagner en perf, stocker sur un bucket S3 est une solution potentielle.  
 (non)
 
@@ -308,6 +314,8 @@ Relancer le scraper met à jour les données existantes (upsert sur `source + so
 | `GET` | `/animals/{uuid}` | Fiche détaillée d'un animal |
 | `GET` | `/animals/{uuid}/similar` | Animaux similaires (recherche vectorielle) |
 | `GET` | `/refuges` | Liste des refuges géocodés (lat/lng) pour la carte |
+| `POST` | `/animals` | Créer une annonce (particuliers) — prédit la race via DL au moment du POST |
+| `POST` | `/predict-breed` | Prédiction de race depuis une image base64 (utilisé par le formulaire `/post`) |
 | `POST` | `/chat` | Chatbot PawBuddy — streaming SSE (tool use + RAG + Bedrock) |
 
 Documentation interactive : http://localhost:8000/docs
@@ -386,8 +394,91 @@ Copier `.env.example` en `.env` et remplir les valeurs AWS. Toutes les autres va
 | `AWS_ACCESS_KEY_ID` | api | Clé d'accès IAM (dev local uniquement) |
 | `AWS_SECRET_ACCESS_KEY` | api | Secret IAM (dev local uniquement) |
 | `BEDROCK_MODEL` | api | Override du modèle Bedrock (optionnel) |
+| `BREED_MODEL_PATH` | api | Chemin vers le `.pth` du classifieur (défaut : `models/pet_model_best.pth`) |
 
 > Sur EC2, `AWS_ACCESS_KEY_ID` et `AWS_SECRET_ACCESS_KEY` ne sont pas nécessaires — le IAM role attaché à l'instance prend le relais automatiquement.
+
+---
+
+## Deep Learning — Classifieur de race
+
+Un modèle **MobileNetV2** multi-tâches classe automatiquement la race des animaux (chien/chat) à partir de leurs photos.
+
+### Architecture
+
+- **Backbone** : MobileNetV2 pré-entraîné ImageNet
+- **Têtes** : 3 sorties simultanées — espèce (2 classes), couleur (5 classes), race (37 classes Oxford-IIIT Pet)
+- **Dataset** : Oxford-IIIT Pet (7 349 images, 37 races : 12 chats + 25 chiens)
+- **Entraînement** : ≈50 époques, Adam, lr=0.001, dropout 0.3
+
+### Workflow d’enrichissement
+
+Le classifieur ne tourne pas en temps réel sur les scrapers. Il s’exécute en **job ponctuel** après un scraping :
+
+```bash
+# Via pawmatch.sh (Python local nécessaire)
+bash pawmatch.sh enrich
+
+# Ou directement :
+python -m scripts.enrich_breeds
+```
+
+Prérequis locaux : `pip install torch torchvision psycopg2-binary Pillow requests tqdm`
+**Prérequis locaux :** `pip install torch torchvision psycopg2-binary Pillow requests tqdm`
+Le fichier `.pth` est dans `dl_models/utils/out/pet_model_best.pth` (présent après `git pull`).
+
+Le script enrichit tous les animaux `chien`/`chat` sans `race_predicted`, télécharge leur première image et écrit le résultat dans `race_predicted` + `race_confidence`. Seuil de confiance : **0.70** (en dessous, les colonnes restent nulles).
+
+### Enrichir la DB de production (EC2) en LOCAL
+
+Le script ne tourne pas dans Docker car il a besoin de PyTorch localement. Pour enrichir la base de l’EC2 sans y installer Python, ouvre un **tunnel SSH** vers son PostgreSQL.
+
+**Quand en a-t-on besoin ?**
+Après chaque nouveau scraping en production : les animaux fraîchement importés n’ont pas encore de `race_predicted`. À lancer une fois les scrapers terminés pour que les badges MAYBE apparaissent sur le front.
+
+**Prérequis :**
+
+- Accès SSH à l’EC2 (`~/.ssh/` configuré)
+- Python + dépendances installés **localement** (voir ci-dessus)
+- Le projet cloné localement avec le `.pth` présent (`git pull`)
+
+**Procédure :**
+
+```bash
+# Terminal 1 — ouvrir le tunnel SSH et le laisser ouvert
+ssh -L 5432:localhost:5432 ec2-user@<ip-ec2>
+
+# Terminal 2 — lancer l’enrichissement (pointe sur la DB EC2 via le tunnel)
+DATABASE_URL=postgresql://pawmatch:pawmatch@localhost:5432/pawmatch python -m scripts.enrich_breeds
+```
+
+Ta machine fait l’inférence PyTorch, les résultats (`race_predicted`, `race_confidence`) s’écrivent directement dans la base de production. Ferme le tunnel une fois terminé.
+
+### Prédiction à la publication (annonces particuliers)
+
+Quand un particulier dépose une annonce via `/post`, la race est prédite **au moment du POST** :
+
+```
+POST /animals  →  api/predict_breed.py  →  race_predicted + race_confidence en base
+```
+
+L’embedding pgvector est également calculé immédiatement pour que le chatbot trouve le nouvel animal dès la publication.
+
+### Affichage dans le front
+
+- Race connue et précise (ex : Yorkshire) : affichée directement
+- Race vague (Européen, Croisé, Bâtard…) avec prédiction ≥ 65 % : badge **MAYBE (X %) : NomRace** en italique
+- Race vague sans prédiction fiable : affichée telle quelle
+
+### Performances (images réelles)
+
+| Métrique | Résultat |
+|---------|----------|
+| Précision espèce (chat/chien) | **95 %** |
+| Précision race (animaux Oxford-mappables) | **44 %** |
+| Confiance moyenne | 48.5 % |
+
+La majorité des animaux en refuge ont des races génériques absentes du vocabulaire Oxford (37 races). Voir `docs/deep_learning.md` pour l’analyse complète.
 
 ---
 
