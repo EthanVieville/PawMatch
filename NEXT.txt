@@ -1,5 +1,8 @@
 - Peaufiner le LLMops et autres features du genre
-- docs de LLMops et autres features
+    - Plus de fonctionnalités LLMops : RAGAS et autres 
+    - DROP la base et relacner les scrappers pour tester le rewritten_description, vérifier que c'est bien intercepter et mis à jour par le LLM. Voir les rés sur le site + sur le backed (ca fonctionne déjà sur 10)
+- intégrer tout ca dans le bash etc...
+- docs de LLMops et autres features + fonction AI de rewritte description
 - schéma des services Docker 
 - schéma des données
 - schéma du AWS

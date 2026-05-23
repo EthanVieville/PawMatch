@@ -149,19 +149,25 @@ export default async function AnimalDetail({
           </div>
 
           {/* Description */}
-          {animal.description ? (
+          {(animal.description_rewritten || animal.description) ? (
             <div className="mb-6">
               <h2
-                className="text-xl uppercase tracking-wider mb-3"
+                className="text-xl uppercase tracking-wider mb-3 flex items-center gap-2"
                 style={{
                   fontFamily: "var(--font-bebas), Impact, sans-serif",
                   color: "var(--primary)",
                 }}
               >
                 Présentation
+                {animal.description_rewritten && (
+                  <span className="text-xs font-sans normal-case tracking-normal px-2 py-0.5 rounded-full"
+                    style={{ background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                    ✨ PawBuddy
+                  </span>
+                )}
               </h2>
               <p className="leading-relaxed text-sm" style={{ color: "var(--text-muted)" }}>
-                {animal.description}
+                {animal.description_rewritten ?? animal.description}
               </p>
             </div>
           ) : (
