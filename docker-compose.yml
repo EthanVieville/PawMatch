@@ -121,6 +121,25 @@ services:
     profiles:
       - seeder
 
+  # ── Rewriter (réécriture descriptions via Bedrock — après chaque scraping) ─
+  # docker compose --profile rewriter run --rm rewriter
+  # Limiter le nombre d'animaux : REWRITE_LIMIT=50 docker compose --profile rewriter run --rm rewriter
+  rewriter:
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile.rewriter
+    environment:
+      - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
+      - AWS_REGION=${AWS_REGION:-eu-west-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - REWRITE_LIMIT=${REWRITE_LIMIT:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - rewriter
+
   # ── Refuge Seeder (géocodage Nominatim — après chaque scraping) ──────────
   # docker compose --profile refuge-seeder run --rm refuge-seeder
   refuge-seeder:

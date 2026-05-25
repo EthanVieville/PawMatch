@@ -9,3 +9,12 @@
 - uniformiser la doc 
 - README à clean : ya trop d'infos, même si utiles, y'a des trucs à tej, surtou tles cmd docker, vu qu'on as le bash mtn
 - slide (jsp si il en faut ? mais ca servira le ppt final de façon)
+
+
+-- NEXT TIMES 
+
+- On as une CI, faire la CD 
+- Les jobs ponctuels à passés en job daily (CRON sur scrappers etc...)
+- Si AWS pas suffisant actuellement, faire évoluer l'archi ^^
+    S3 pour les images et autres, faire du vrais stockage
+    Faire du ML sur AWS -> matière ml avec cloud sera validé en +

@@ -1,4 +1,4 @@
-# PawMatch — Pa5emeAnn-e
+# PawMatch
 
 Plateforme d'aide à l'adoption d'animaux boostée par l'IA générative.
 
@@ -8,9 +8,9 @@ Plateforme d'aide à l'adoption d'animaux boostée par l'IA générative.
 
 ```
 front/        → Site web Next.js 14 (TypeScript, Tailwind CSS)
-api/          → API REST FastAPI (Python) — lit la base de données + chatbot LLM
-scraper/      → Collecte multi-sources (la-spa.fr + secondechance.org) → écrit en PostgreSQL
-scripts/      → Embeddings (sentence-transformers + pgvector) + seed knowledge base + géocodage refuges
+api/          → API REST FastAPI (Python) — chatbot LLM + LLMOps
+scraper/      → Collecte multi-sources (la-spa.fr + secondechance.org)
+scripts/      → Jobs ponctuels : embeddings, rewrite descriptions, seed knowledge, géocodage
 dl_models/    → Classifieur de race PyTorch (MobileNetV2, 37 races Oxford-IIIT Pet)
 ```
 
@@ -18,508 +18,217 @@ dl_models/    → Classifieur de race PyTorch (MobileNetV2, 37 races Oxford-IIIT
 
 ```
 la-spa.fr  +  secondechance.org
-       ↓  (scrapers Selenium)
-  PostgreSQL + pgvector
-       ↓  (scripts/embedder)
-  Vecteurs de similarité (384 dims)
-       ↓  (scripts/seed_refuges — Nominatim)
-  Table refuges (lat/lng des refuges géocodés)
-       ↓  (scripts/enrich_breeds — PyTorch MobileNetV2)
-  race_predicted + race_confidence sur les animaux chien/chat
-       ↓  (FastAPI)
+      ed_refuges     → coordonnées GPS (Nominatim)
+       ↓  scripts/enrich_breeds    → race_predicted (MobileNetV2)
   API REST  http://localhost:8000
-       ↓  (Server Components Next.js)
+       ↓  Server Components Next.js
   Site web  http://localhost:3000
 
-  Chatbot PawBuddy (widget flottant sur toutes les pages)
-       ↓  (Next.js /api/chat proxy)
-  FastAPI POST /chat
-       ↓  (RAG pgvector + knowledge_chunks)
-  Amazon Bedrock (Claude Haiku 4.5)
-       ↓  (SSE streaming)
-  Réponse streamée token par token
+  Chatbot PawBuddy
+       ↓  cache sémantique pgvector (hit → réponse instantanée, coût $0)
+       ↓  miss → RAG knowledge_chunks + tool use (search_animals, etc.)
+  Amazon Bedrock (Claude Haiku 4.5, eu-west-1)  ←→  llm_traces (tokens, coût, latence)
+       ↓  SSE streaming token par token ↓  scrapers Selenium
+  PostgreSQL + pgvector
+       ↓  scripts/embedder         → vecteurs de similarité 384 dims
+       ↓  scripts/rewrite          → descriptions réécrites via Bedrock (Claude Haiku)
+       ↓  scripts/se
 ```
-
-Les scrapers sont des **jobs ponctuels** : on les lance quand on veut rafraîchir les données.  
-L'embedder est à relancer après chaque scraping pour mettre à jour les suggestions d'animaux similaires et les embeddings du knowledge base.  
-L'API et le front tournent en continu et lisent la base.  
-Le front fetch directement côté serveur (Server Components) — pas de requête client exposée, sauf pour le chatbot qui passe par un proxy Next.js.
-
-Les scrapers + embedder seront bien entendu automatisés via CRON pour s'exécuter chaque nuit. Pour l'instant pas nécessaire au développement. (pi ça coûterait du fric ces conneries)
 
 ---
 
 ## Prérequis
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et démarré
-- Un fichier `.env` à la racine (voir section Variables d'environnement). Ce file n'est évidemment pas sur le github espèce de vilain méchant garçon, demande si tu le veux le prix c'est un gros bizou
+- Un fichier `.env` à la racine (copier `.env.example` et remplir les valeurs AWS)
 - C'est tout.
 
 ---
 
 ## Lancer le projet
 
-Toutes les commandes passent par `pawmatch.sh`. Fonctionne partout — PowerShell, Git Bash, EC2 :
+Toutes les commandes passent par `pawmatch.sh` :
 
 ```bash
 bash pawmatch.sh <commande>
 ```
 
-### Commandes disponibles
-
-| Commande | Description |
-|----------|-------------|
-| `setup` | **Première installation** — build les images, démarre le stack, seed la knowledge base, calcule les embeddings |
-| `start` | Démarrage rapide (données déjà en base, pas de rebuild) |
-| `stop` | Arrêter le stack (données conservées) |
-| `reset` | ⚠️ Arrêter + supprimer la base de données |
-| `deploy` | Rebuild les images et redémarre après un changement de code |
-| `data` | Rafraîchir les animaux — scrapers La SPA + Seconde Chance + embeddings + géocodage refuges |
-| `refuges` | Géocoder les refuges via Nominatim (à relancer après `data` si nouveaux refuges) |
-| `knowledge` | Mettre à jour la knowledge base du chatbot + embeddings |
-| `logs` | Voir les logs en direct |
-| `enrich` | Enrichir les races avec le classifieur DL (exécution locale) |
-| `status` | État des services |
-
-### Exemples
+| | Commande | Description |
+|---|---|---|
+| **INFRA** | `setup` | Première installation — build, démarrage, seed, embeddings |
+| | `start` | Démarrer le stack |
+| | `stop` | Arrêter le stack |
+| | `restart` | Arrêter puis redémarrer |
+| | `deploy` | Rebuild après un `git pull` |
+| | `reset` | ⚠️ Tout effacer, base de données comprise |
+| **DONNÉES** | `data [N]` | Pipeline complet — scraping → embeddings → refuges → rewrite LLM. `N` = limite d'animaux par source (ex: `data 150`) |
+| | `rewrite [N]` | Réécrire les descriptions via Bedrock. `N` = limite optionnelle |
+| | `knowledge` | Mettre à jour la base de connaissances du chatbot |
+| | `refuges` | Géocoder les refuges (carte) |
+| | `enrich` | Prédire les races via le classifieur DL *(Python local requis)* |
+| **MONITORING** | `logs` | Logs en direct (Ctrl+C pour quitter) |
+| | `status` | État des conteneurs |
 
 ```bash
-# Première fois
-bash pawmatch.sh setup
-
-# Après un git pull sur l'EC2
-bash pawmatch.sh deploy
-
-# Rafraîchir les données animaux
-bash pawmatch.sh data
-
-# Voir ce qui tourne
-bash pawmatch.sh status
+bash pawmatch.sh setup          # première fois
+bash pawmatch.sh deploy         # après un git pull
+bash pawmatch.sh data           # pipeline complet
+bash pawmatch.sh data 150       # ~150 animaux par source
+bash pawmatch.sh rewrite 50     # réécrire max 50 descriptions
 ```
 
-> ⚠️ `reset` supprime le volume PostgreSQL. Toutes les données scrapées sont perdues.
-
-Une fois lancé (en local) :
+URLs locales :
 
 | Service | URL |
-|---------|-----|
+|---|---|
 | Site web | http://localhost:3000 |
-| API | http://localhost:8000 |
-| Doc API (Swagger) | http://localhost:8000/docs |
+| API + Swagger | http://localhost:8000/docs |
+| Dashboard LLMOps | http://localhost:8000/admin?token=`<ADMIN_TOKEN>` |
 
 ---
 
-## Lancer les scrapers
+## LLMOps
 
-Les scrapers sont des jobs ponctuels : ils collectent les fiches animaux et les enregistrent en base, puis s'arrêtent. Ils ne démarrent **pas** avec `docker compose up`.
+Toutes les interactions LLM sont tracées en base (`llm_traces`) avec tokens, coût, latence et outils utilisés. Un dashboard admin regroupe les métriques.
 
-### Construire les images scraper (première fois ou après modif)
-
-```bash
-docker compose --profile scraper build --no-cache
-```
-
-### La SPA (la-spa.fr)
+### Dashboard
 
 ```bash
-docker compose --profile scraper run --rm scraper-laspa
+# En local
+http://localhost:8000/admin?token=<ADMIN_TOKEN>
+
+# En production via SSH tunnel
+ssh -L 8001:localhost:8000 ec2-user@<ip-ec2>
+# → http://localhost:8001/admin?token=<ADMIN_TOKEN>
 ```
 
-### Seconde Chance (secondechance.org)
+Métriques disponibles : coût total, projection mensuelle, taux d'erreur, latences p50/p90/p99, taux de cache hit, économies estimées, top outils, répartition par feature, 100 dernières traces.
 
-```bash
-docker compose --profile scraper run --rm scraper-sc
-```
+### Cache sémantique
 
-**Ce que font les scrapers :**
-1. Crawlent les pages de listing de chaque site (pagination automatique)
-2. Parsent chaque fiche animal (nom, espèce, race, âge, refuge, description, incompatibilités, images)
-3. Upsert en base PostgreSQL — relancer le scraper met à jour les fiches existantes sans créer de doublons
+Les requêtes sans contexte (hors fiche animal, hors historique de conversation) sont mises en cache via similarité cosinus pgvector. Seuil : **0.92**, TTL : **24h**.
 
-**Paramètres configurables** (dans `docker-compose.yml`) :
+| | Appel Bedrock | Cache hit |
+|---|---|---|
+| Latence | ~4 000 ms | ~30 ms |
+| Coût | ~$0.00016 | **$0** |
 
-| Variable | Défaut | Description |
-|----------|--------|-------------|
-| `MAX_PAGES` | `10` (SPA) / `3` (SC) | Pages de listing à crawler. Pour SC : par espèce (chien/chat/lapin) |
-| `NUM_WORKERS` | `4` (SPA) / `1` (SC) | Workers parallèles. SC utilise Selenium → 1 seul Chrome |
+### Réécriture des descriptions
 
-Pour un test rapide sur 1 page :
-```bash
-docker compose --profile scraper run --rm -e MAX_PAGES=1 scraper-sc
-```
+Les descriptions brutes issues du scraping sont reformulées par Claude Haiku en texte clair et chaleureux, stockées dans `description_rewritten`. Affichées sur les fiches avec le badge ✨ PawBuddy.
+
+Coût indicatif : ~$0.046 pour 500 animaux.
 
 ---
 
-## Peupler la knowledge base (chatbot)
+## Chatbot PawBuddy
 
-La knowledge base contient les informations sur les processus d'adoption, les conseils de soins et les infos sur les refuges — utilisées par le chatbot PawBuddy via RAG.
+Widget flottant sur toutes les pages. Alimenté par **Amazon Bedrock (Claude Haiku 4.5)** via RAG sur la base PostgreSQL.
 
-```bash
-# Peupler la table knowledge_chunks (idempotent — remet à zéro et réinsère)
-docker compose --profile seeder run --rm seeder
-```
-
-À relancer si le contenu de `scripts/seed_knowledge.py` est modifié. Suivi d'un embedder pour recalculer les vecteurs.
-
----
-
-## Géocodage des refuges (carte interactive)
-
-Les coordonnées GPS des refuges sont calculées à partir de leur **nom** via l'API Nominatim (OpenStreetMap). Aucune clé API requise, gratuit, limité à 1 req/sec (ToS).
-
-```bash
-# Géocoder tous les refuges présents en base (idempotent — skipe les déjà trouvés)
-bash pawmatch.sh refuges
-
-# Ou manuellement :
-docker compose --profile refuge-seeder run --build --rm refuge-seeder
-```
-
-**Fonctionnement :**
-1. Récupère les noms de refuges distincts depuis la table `animals`
-2. Pour les refuges SPA (format `"La SPA - Refuge de VILLE – Sous-nom"`), extrait la ville avec un parser de noms
-3. Essaie plusieurs requêtes Nominatim par ordre de précision : nom complet → nom + France → ville extraite → ville alternative
-4. Insère les coordonnées dans la table `refuges` (ou `null` si non trouvé)
-
-**Taux de couverture observé :** ~51/76 refuges géocodés (67%). Les refuges SPA sont quasi-tous trouvés. Les petites associations secondechance.org sans indication géographique dans le nom ne sont pas trouvées — comportement attendu et non bloquant (pas de pin sur la map, rien de cassé).
-
-**Coût AWS :** zéro — Nominatim est externe et gratuit.
-
----
-
-## Calculer les embeddings (animaux similaires + RAG chatbot)
-
-Après chaque scraping ou modification de la knowledge base, relancer l'embedder :
-
-```bash
-# Construire l'image (première fois ou après modif)
-docker compose --profile embedder build --no-cache
-
-# Lancer le calcul
-docker compose --profile embedder run --rm embedder
-```
-
-L'embedder utilise `paraphrase-multilingual-MiniLM-L12-v2` (sentence-transformers) pour encoder en vecteurs 384 dims stockés dans pgvector. Il traite les animaux **et** les knowledge chunks. Idempotent — ne retouche que les entrées sans embedding.
+- Recherche d'animaux avec liens cliquables vers les fiches
+- Informations sur les démarches d'adoption
+- Conseils de soins par espèce
+- Streaming token par token, conversation persistante (localStorage)
+- Tool use : `search_animals`, `search_knowledge`, `get_animal`, `search_animal_by_name`
+- Cache sémantique pour les questions génériques
 
 ---
 
 ## Base de données
 
-Le projet utilise **PostgreSQL 16 + pgvector** via Docker.
+PostgreSQL 16 + pgvector. Les données survivent aux redémarrages via le volume Docker `postgres_data`. Seul `bash pawmatch.sh reset` (= `docker compose down -v`) les efface.
 
-### Tables
-
-**`animals`** — une ligne par animal, toutes sources confondues
-
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `id` | UUID | Identifiant unique |
-| `source` | VARCHAR | Source du scraping (`la-spa`, `secondechance`) |
-| `source_url` | VARCHAR | URL de la fiche originale (clé d'upsert) |
-| `name` | VARCHAR | Nom de l'animal |
-| `species` | VARCHAR | Espèce (`chien`, `chat`, `lapin`, `octodon`…) |
-| `race` | VARCHAR | Race (issue du scraping) |
-| `race_predicted` | VARCHAR | Race prédite par le classifieur DL |
-| `race_confidence` | FLOAT | Score de confiance du classifieur (0-1) |
-| `sex` | VARCHAR | `male` / `femelle` |
-| `birth_date` | VARCHAR | Date de naissance (format YYYY-MM-DD) |
-| `age` | INTEGER | Âge calculé en années |
-| `refuge` | VARCHAR | Nom du refuge |
-| `description` | TEXT | Description extraite de la fiche |
-| `incompatibilities` | TEXT[] | Ex. `{enfants, chiens}` |
-| `scraped_at` | TIMESTAMP | Date du dernier scraping |
-| `embedding` | VECTOR(384) | Vecteur de similarité sémantique (sentence-transformers) |
-
-**`animal_images`** — relation 1-N avec `animals`
-
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `id` | UUID | Identifiant |
-| `animal_id` | UUID | FK vers `animals` |
-| `url` | VARCHAR | URL de l'image (source originale) |
-| `position` | INTEGER | Ordre d'affichage |
-
-**`refuges`** — coordonnées GPS des refuges (géocodage Nominatim)
-
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `id` | UUID | Identifiant |
-| `name` | VARCHAR | Nom du refuge (unique — même valeur que `animals.refuge`) |
-| `source` | VARCHAR | Source (`la-spa`, `secondechance`) |
-| `lat` | DOUBLE | Latitude (null si non trouvé) |
-| `lng` | DOUBLE | Longitude (null si non trouvé) |
-| `geocoded_at` | TIMESTAMP | Date du géocodage |
-
-Peuplée par `scripts/seed_refuges.py` via l'API Nominatim (OpenStreetMap). Idempotent : ne retente que les refuges sans coordonnées. Jointure avec `animals` sur le nom du refuge.
-
-**`knowledge_chunks`** — base de connaissances pour le chatbot RAG
-
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `id` | UUID | Identifiant |
-| `category` | VARCHAR | `adoption_process` / `care_advice` / `shelter_info` |
-| `source` | VARCHAR | `la-spa` / `secondechance` / `general` |
-| `title` | VARCHAR | Titre du chunk |
-| `content` | TEXT | Contenu (processus d'adoption, conseils, infos refuges) |
-| `embedding` | VECTOR(384) | Vecteur pour la recherche sémantique RAG |
-| `created_at` | TIMESTAMP | Date de création |
-
-### Multi-source
-
-La colonne `source` permet d'agréger plusieurs scrapers dans la même base sans changer le schéma. Ajouter un nouveau site = créer un scraper qui écrit avec `SCRAPER_SOURCE=nouveau-site`. L'API agrège tout automatiquement, ou peut filtrer par source avec `GET /animals?source=la-spa`.
-
-### URL Images
-
-Pour les animaux scraped (la-spa, secondechance), le champ `url` contient l’URL externe de la source d’origine.
-Pour les annonces déposées par des particuliers via `/post`, l’image est **compressée côté client** (Canvas API, max 600 px, JPEG 72 %) puis stockée directement en base comme **data URI base64**. Aucun stockage fichier, aucune dépendance S3, aucun problème de permissions Docker.
-Si on veut perdre du fric mais gagner en perf, stocker sur un bucket S3 est une solution potentielle.  
-(non)
-
-### pgvector
-
-L'extension `pgvector` est déjà installée (image `pgvector/pgvector:pg16`). La colonne `embedding vector(384)` stocke les représentations sémantiques calculées par l'embedder. Elles permettent la recherche d'animaux similaires via distance cosinus (`<=>`) et le RAG du chatbot.
-
-### Inspecter la base
+| Table | Description |
+|---|---|
+| `animals` | Un animal par ligne — toutes sources confondues |
+| `animal_images` | Images (relation 1-N avec `animals`) |
+| `refuges` | Coordonnées GPS géocodées via Nominatim |
+| `knowledge_chunks` | Base de connaissances pour le RAG du chatbot |
+| `llm_traces` | Trace de chaque appel LLM (tokens, coût, latence, outils) |
+| `llm_cache` | Cache sémantique des réponses du chatbot |
 
 ```bash
+# Inspecter la base
 docker compose exec postgres psql -U pawmatch -d pawmatch
 ```
 
-Commandes utiles dans psql :
 ```sql
-SELECT count(*) FROM animals;
 SELECT source, count(*) FROM animals GROUP BY source;
-SELECT name, species, refuge, source FROM animals WHERE description IS NOT NULL LIMIT 10;
 SELECT count(*) FROM animals WHERE embedding IS NOT NULL;
-SELECT category, count(*) FROM knowledge_chunks GROUP BY category;
-\q
+SELECT count(*) FROM animals WHERE description_rewritten IS NOT NULL;
+SELECT feature, count(*), round(sum(cost_usd)::numeric, 5) FROM llm_traces GROUP BY feature;
 ```
-
-### Persistance
-
-Les données survivent aux redémarrages Docker grâce au volume nommé `postgres_data`.  
-Seul `docker compose down -v` les efface.  
-Relancer le scraper met à jour les données existantes (upsert sur `source + source_url`).
 
 ---
 
 ## API — Endpoints
 
 | Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| `GET` | `/health` | Statut de l'API + connexion DB |
-| `GET` | `/animals` | Liste tous les animaux |
-| `GET` | `/animals?species=chien` | Filtre par espèce |
-| `GET` | `/animals?source=la-spa` | Filtre par source |
-| `GET` | `/animals/{uuid}` | Fiche détaillée d'un animal |
-| `GET` | `/animals/{uuid}/similar` | Animaux similaires (recherche vectorielle) |
-| `GET` | `/refuges` | Liste des refuges géocodés (lat/lng) pour la carte |
-| `POST` | `/animals` | Créer une annonce (particuliers) — prédit la race via DL au moment du POST |
-| `POST` | `/predict-breed` | Prédiction de race depuis une image base64 (utilisé par le formulaire `/post`) |
-| `POST` | `/chat` | Chatbot PawBuddy — streaming SSE (tool use + RAG + Bedrock) |
-
-Documentation interactive : http://localhost:8000/docs
-
----
-
-## Chatbot PawBuddy
-
-Widget flottant accessible depuis toutes les pages. Alimenté par **Amazon Bedrock (Claude Haiku 4.5)** via RAG sur la base PostgreSQL.
-
-**Fonctionnalités :**
-- Recherche d'animaux à adopter avec liens cliquables vers les fiches
-- Informations sur les démarches et modalités d'adoption
-- Conseils de soins par espèce
-- Conversation persistante entre les pages et après refresh (localStorage)
-- Streaming token par token
-
-**Architecture du chatbot :**
-```
-Message utilisateur
-  → Classificateur d'intention (Bedrock, max_tokens=10)
-      ├── find_animal      → RAG sur animals (filtre par espèce)
-      ├── adoption_process → RAG sur knowledge_chunks (adoption_process + shelter_info)
-      ├── care_advice      → RAG sur knowledge_chunks (care_advice)
-      └── general          → RAG sur les deux
-  → Prompt système dynamique + contexte injecté
-  → Claude Haiku 4.5 (Bedrock) — réponse streamée SSE
-```
-
-Voir `documentation/bedrock_setup.md` pour la configuration AWS complète.
-
----
-
-## Développement sans Docker
-
-Vraiment personne fait ça la vie
-
-Si Node.js et Python sont installés localement (nécessite aussi PostgreSQL local) :
-
-**Frontend**
-```bash
-cd front
-npm install
-npm run dev       # http://localhost:3000
-```
-
-**API** (nécessite PostgreSQL accessible sur localhost:5432)
-```bash
-cd api
-pip install -r requirements.txt
-DATABASE_URL=postgresql://pawmatch:pawmatch@localhost:5432/pawmatch uvicorn main:app --reload
-```
-
-**Scraper**
-```bash
-cd scraper
-pip install -r requirements.txt
-SCRAPER_SOURCE=secondechance MAX_PAGES=1 DATABASE_URL=postgresql://pawmatch:pawmatch@localhost:5432/pawmatch python main.py
-```
-
----
-
-## Variables d'environnement
-
-Copier `.env.example` en `.env` et remplir les valeurs AWS. Toutes les autres variables ont des valeurs par défaut dans `docker-compose.yml`.
-
-| Variable | Service | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | api, scraper, embedder | Connexion PostgreSQL |
-| `API_URL` | front | URL interne de l'API (docker: `http://api:8000`) |
-| `ALLOWED_ORIGINS` | api | CORS — origines autorisées |
-| `SCRAPER_SOURCE` | scraper | `la-spa` ou `secondechance` |
-| `MAX_PAGES` | scraper | Pages de listing à crawler |
-| `NUM_WORKERS` | scraper | Workers parallèles (1 pour Selenium) |
-| `AWS_REGION` | api | Région Bedrock (`eu-west-1`) |
-| `AWS_ACCESS_KEY_ID` | api | Clé d'accès IAM (dev local uniquement) |
-| `AWS_SECRET_ACCESS_KEY` | api | Secret IAM (dev local uniquement) |
-| `BEDROCK_MODEL` | api | Override du modèle Bedrock (optionnel) |
-| `BREED_MODEL_PATH` | api | Chemin vers le `.pth` du classifieur (défaut : `models/pet_model_best.pth`) |
-
-> Sur EC2, `AWS_ACCESS_KEY_ID` et `AWS_SECRET_ACCESS_KEY` ne sont pas nécessaires — le IAM role attaché à l'instance prend le relais automatiquement.
+|---|---|---|
+| `GET` | `/health` | Statut API + connexion DB |
+| `GET` | `/animals` | Liste des animaux (filtres : `species`, `source`) |
+| `GET` | `/animals/{uuid}` | Fiche détaillée |
+| `GET` | `/animals/{uuid}/similar` | Animaux similaires (pgvector) |
+| `GET` | `/refuges` | Refuges géocodés pour la carte |
+| `POST` | `/animals` | Créer une annonce particulier (prédit la race via DL) |
+| `POST` | `/predict-breed` | Prédiction de race depuis une image base64 |
+| `POST` | `/chat` | Chatbot PawBuddy — streaming SSE |
+| `GET` | `/admin` | Dashboard LLMOps *(token requis)* |
 
 ---
 
 ## Deep Learning — Classifieur de race
 
-Un modèle **MobileNetV2** multi-tâches classe automatiquement la race des animaux (chien/chat) à partir de leurs photos.
+Modèle **MobileNetV2** multi-tâches (backbone ImageNet) — 3 têtes : espèce, couleur, race (37 races Oxford-IIIT Pet).
 
-### Architecture
+| Métrique | Résultat |
+|---|---|
+| Précision espèce (chat/chien) | **95 %** |
+| Précision race (animaux Oxford-mappables) | **44 %** |
 
-- **Backbone** : MobileNetV2 pré-entraîné ImageNet
-- **Têtes** : 3 sorties simultanées — espèce (2 classes), couleur (5 classes), race (37 classes Oxford-IIIT Pet)
-- **Dataset** : Oxford-IIIT Pet (7 349 images, 37 races : 12 chats + 25 chiens)
-- **Entraînement** : ≈50 époques, Adam, lr=0.001, dropout 0.3
-
-### Workflow d’enrichissement
-
-Le classifieur ne tourne pas en temps réel sur les scrapers. Il s’exécute en **job ponctuel** après un scraping :
+**Workflow :** job ponctuel après scraping via `bash pawmatch.sh enrich` (Python local requis).  
+**Sur EC2 :** ouvrir un tunnel SSH vers le PostgreSQL de l'EC2, puis lancer `enrich` localement.
 
 ```bash
-# Via pawmatch.sh (Python local nécessaire)
-bash pawmatch.sh enrich
-
-# Ou directement :
-python -m scripts.enrich_breeds
-```
-
-Prérequis locaux : `pip install torch torchvision psycopg2-binary Pillow requests tqdm`
-**Prérequis locaux :** `pip install torch torchvision psycopg2-binary Pillow requests tqdm`
-Le fichier `.pth` est dans `dl_models/utils/out/pet_model_best.pth` (présent après `git pull`).
-
-Le script enrichit tous les animaux `chien`/`chat` sans `race_predicted`, télécharge leur première image et écrit le résultat dans `race_predicted` + `race_confidence`. Seuil de confiance : **0.70** (en dessous, les colonnes restent nulles).
-
-### Enrichir la DB de production (EC2) en LOCAL
-
-Le script ne tourne pas dans Docker car il a besoin de PyTorch localement. Pour enrichir la base de l’EC2 sans y installer Python, ouvre un **tunnel SSH** vers son PostgreSQL.
-
-**Quand en a-t-on besoin ?**
-Après chaque nouveau scraping en production : les animaux fraîchement importés n’ont pas encore de `race_predicted`. À lancer une fois les scrapers terminés pour que les badges MAYBE apparaissent sur le front.
-
-**Prérequis :**
-
-- Accès SSH à l’EC2 (`~/.ssh/` configuré)
-- Python + dépendances installés **localement** (voir ci-dessus)
-- Le projet cloné localement avec le `.pth` présent (`git pull`)
-
-**Procédure :**
-
-```bash
-# Terminal 1 — ouvrir le tunnel SSH et le laisser ouvert
-ssh -L 5432:localhost:5432 ec2-user@<ip-ec2>
-
-# Terminal 2 — lancer l’enrichissement (pointe sur la DB EC2 via le tunnel)
+ssh -L 5432:localhost:5432 ec2-user@<ip-ec2>   # terminal 1 — laisser ouvert
 DATABASE_URL=postgresql://pawmatch:pawmatch@localhost:5432/pawmatch python -m scripts.enrich_breeds
 ```
 
-Ta machine fait l’inférence PyTorch, les résultats (`race_predicted`, `race_confidence`) s’écrivent directement dans la base de production. Ferme le tunnel une fois terminé.
+**Prédiction temps réel :** pour les annonces de particuliers (`POST /animals`), la race est prédite au moment du dépôt.
 
-### Prédiction à la publication (annonces particuliers)
+---
 
-Quand un particulier dépose une annonce via `/post`, la race est prédite **au moment du POST** :
+## Variables d'environnement
 
-```
-POST /animals  →  api/predict_breed.py  →  race_predicted + race_confidence en base
-```
+Copier `.env.example` en `.env`. Toutes les variables ont des valeurs par défaut sauf les credentials AWS et le token admin.
 
-L’embedding pgvector est également calculé immédiatement pour que le chatbot trouve le nouvel animal dès la publication.
-
-### Affichage dans le front
-
-- Race connue et précise (ex : Yorkshire) : affichée directement
-- Race vague (Européen, Croisé, Bâtard…) avec prédiction ≥ 65 % : badge **MAYBE (X %) : NomRace** en italique
-- Race vague sans prédiction fiable : affichée telle quelle
-
-### Performances (images réelles)
-
-| Métrique | Résultat |
-|---------|----------|
-| Précision espèce (chat/chien) | **95 %** |
-| Précision race (animaux Oxford-mappables) | **44 %** |
-| Confiance moyenne | 48.5 % |
-
-La majorité des animaux en refuge ont des races génériques absentes du vocabulaire Oxford (37 races). Voir `docs/deep_learning.md` pour l’analyse complète.
+| Variable | Description |
+|---|---|
+| `AWS_REGION` | Région Bedrock (`eu-west-1`) |
+| `AWS_ACCESS_KEY_ID` | Clé IAM — **dev local uniquement** (IAM role sur EC2) |
+| `AWS_SECRET_ACCESS_KEY` | Secret IAM — **dev local uniquement** |
+| `ADMIN_TOKEN` | Token d'accès au dashboard LLMOps |
+| `BEDROCK_MODEL` | Override du modèle Bedrock (optionnel) |
 
 ---
 
 ## CI / CD
 
-Chaque push sur `main` déclenche un workflow GitHub Actions (`.github/workflows/ci.yml`) qui reconstruit les images Docker (front, api, scraper, embedder) pour vérifier qu'aucune régression n'est introduite.
+Chaque push sur `main` déclenche un workflow GitHub Actions (`.github/workflows/ci.yml`) qui rebuild les images Docker pour vérifier l'absence de régression.
 
-Le projet tourne sur une instance **AWS EC2 (t3.micro)** avec Docker Compose. Le front est déployé sur **AWS Amplify**. Pour déployer une mise à jour :
-
+**Déploiement sur EC2 :**
 ```bash
-# Sur l'EC2 (via SSH)
 git pull
-docker compose up --build -d
+bash pawmatch.sh deploy    # rebuild + restart
 
-# Peupler/mettre à jour la knowledge base si modifiée
-docker compose --profile seeder run --rm seeder
-
-# Recalculer les embeddings
-docker compose --profile embedder run --rm embedder
-
-# Rebuilder et relancer les scrapers si besoin
-docker compose --profile scraper build --no-cache
-docker compose --profile scraper run --rm scraper-laspa
-docker compose --profile scraper run --rm scraper-sc
+# Si données à rafraîchir :
+bash pawmatch.sh data
 ```
 
----
-
-## Feuille de route cloud (AWS)
-
-Pour une infrastructure plus robuste :
-
-| Composant actuel | Évolution possible |
-|-----------------|----------------|
-| PostgreSQL Docker sur EC2 | RDS PostgreSQL + pgvector |
-| Images Docker buildées sur EC2 | ECR (Elastic Container Registry) |
-| EC2 t3.micro | ECS Fargate ou EC2 t3.small |
-| Scrapers lancés manuellement | EventBridge Scheduler → tâche automatisée |
-| Images animaux (URLs sources) | S3 + CloudFront (proxy des images) |
-| Bedrock on-demand | Provisioned throughput si fort trafic |
+Le front est déployé sur **AWS Amplify** (déploiement automatique sur push `main`).
 
 ---
 
-## mention spécial à ClaudeCode sans qui rien de tout cela n'aurait été réalisable, je t'aime frérot je sais qu'un jour tu trouvera une Claudette gechar niveau GPU dans tout les cas moi je suis frérot tu peux faire croire je suis ton ptit frr handicapté vu comment t + smart que moi tkt les meufs elle vont kiff ton altruisme à la hauteur de la RAM que tu consomme mon bb
+## Documentation 
+
+Voir les documents dans documentation/ pour plus de détails sur tout.
