@@ -112,6 +112,23 @@ def _get_stats(db: Session) -> dict:
         FROM animals
     """)).fetchone()
 
+    # Cache sémantique
+    cache_row = db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE expires_at > NOW())                          AS active_entries,
+            COUNT(*)                                                             AS total_entries,
+            COALESCE(SUM(hit_count) FILTER (WHERE expires_at > NOW()), 0)       AS active_hits
+        FROM llm_cache
+    """)).fetchone()
+
+    cache_rate_row = db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE feature = 'chat_cached')             AS cached_calls,
+            COUNT(*) FILTER (WHERE feature IN ('chat', 'chat_cached'))  AS total_chat_calls,
+            COALESCE(AVG(cost_usd) FILTER (WHERE feature = 'chat'), 0)  AS avg_chat_cost
+        FROM llm_traces
+    """)).fetchone()
+
     # 100 dernières traces
     trace_rows = db.execute(text("""
         SELECT id, feature, model_id, input_tokens, output_tokens,
@@ -163,6 +180,14 @@ def _get_stats(db: Session) -> dict:
             "total":          int(db_status_row.total),
             "rewritten":      int(db_status_row.rewritten),
             "with_embedding": int(db_status_row.with_embedding),
+        },
+        "cache": {
+            "active_entries":  int(cache_row.active_entries),
+            "total_entries":   int(cache_row.total_entries),
+            "active_hits":     int(cache_row.active_hits),
+            "cached_calls":    int(cache_rate_row.cached_calls),
+            "total_chat_calls": int(cache_rate_row.total_chat_calls),
+            "estimated_savings": float(cache_rate_row.cached_calls) * float(cache_rate_row.avg_chat_cost),
         },
         "recent_traces": [
             {
@@ -343,6 +368,52 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
 
   </div>
 
+  <!-- ── Cache semantique ── -->
+  <div class="row g-3 mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="section-title">&#x1F9E0; Cache semantique (cosine &ge; 0.92 &mdash; TTL 24h)</div>
+          <div class="row g-3">
+
+            <div class="col-6 col-md-3">
+              <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                <div class="kpi-label">Entrees actives</div>
+                <div class="kpi-value text-info">__CACHE_ACTIVE__</div>
+                <div class="kpi-sub">sur __CACHE_TOTAL__ au total</div>
+              </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+              <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                <div class="kpi-label">Taux de hit</div>
+                <div class="kpi-value text-success">__CACHE_HIT_RATE__%</div>
+                <div class="kpi-sub"><b>__CACHE_HITS__</b> appels servis depuis le cache</div>
+              </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+              <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                <div class="kpi-label">Economies estimees</div>
+                <div class="kpi-value text-warning">$__CACHE_SAVINGS__</div>
+                <div class="kpi-sub">vs appels Bedrock directs</div>
+              </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+              <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                <div class="kpi-label">Hits actifs cumules</div>
+                <div class="kpi-value" style="color:#6f42c1;">__CACHE_ACTIVE_HITS__</div>
+                <div class="kpi-sub">sur les entrees non expirees</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Feature breakdown ── -->
   <div class="row g-3 mb-4">
     <div class="col-12">
@@ -415,7 +486,7 @@ new Chart(document.getElementById('chart-daily'), {
 });
 
 // Feature donut
-const FEAT_COLORS = { chat: '#0d6efd', description_rewrite: '#6f42c1' };
+const FEAT_COLORS = { chat: '#0d6efd', description_rewrite: '#6f42c1', chat_cached: '#20c997' };
 new Chart(document.getElementById('chart-features'), {
   type: 'doughnut',
   data: {
@@ -474,6 +545,7 @@ def _pct_color(pct: float) -> str:
 def _render(stats: dict, token: str) -> str:
     t   = stats["total"]
     dbs = stats["db_status"]
+    c   = stats["cache"]
 
     error_rate = round(t["errors"] / t["calls"] * 100, 1) if t["calls"] else 0.0
 
@@ -544,6 +616,13 @@ def _render(stats: dict, token: str) -> str:
     html = html.replace("__DB_EMBEDDED_PCT__",    str(embedded_pct))
     html = html.replace("__DB_EMBEDDED_COLOR__",  _pct_color(embedded_pct))
     html = html.replace("__DB_NOT_REWRITTEN__",   f'{dbs["total"] - dbs["rewritten"]:,}')
+    cache_hit_rate = round(c["cached_calls"] / c["total_chat_calls"] * 100, 1) if c["total_chat_calls"] else 0.0
+    html = html.replace("__CACHE_ACTIVE__",       str(c["active_entries"]))
+    html = html.replace("__CACHE_TOTAL__",        str(c["total_entries"]))
+    html = html.replace("__CACHE_HIT_RATE__",     str(cache_hit_rate))
+    html = html.replace("__CACHE_HITS__",         str(c["cached_calls"]))
+    html = html.replace("__CACHE_SAVINGS__",      f'{c["estimated_savings"]:.5f}')
+    html = html.replace("__CACHE_ACTIVE_HITS__",  str(c["active_hits"]))
     html = html.replace("__TBODY_FEATURES__",     feat_rows)
     html = html.replace("__TBODY_TRACES__",       trace_rows)
     html = html.replace("__DAILY_JSON__",         json.dumps(stats["daily"]))

@@ -97,6 +97,20 @@ class Refuge(Base):
     geocoded_at = Column(TIMESTAMP, nullable=True)
 
 
+class LLMCache(Base):
+    __tablename__ = "llm_cache"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    query_text = Column(Text, nullable=False)
+    query_embedding = Column(Vector(384), nullable=False)
+    response_text = Column(Text, nullable=False)
+    feature = Column(String, nullable=False, default="chat")
+    hit_count = Column(Integer, default=0)
+    created_at = Column(TIMESTAMP, server_default="NOW()")
+    last_hit_at = Column(TIMESTAMP, server_default="NOW()")
+    expires_at = Column(TIMESTAMP, nullable=False)
+
+
 class LLMTrace(Base):
     __tablename__ = "llm_traces"
 
