@@ -12,6 +12,7 @@ export type Animal = {
   sex: string | null;
   age: number | null;
   description: string | null;
+  description_rewritten: string | null;
   images: string[];
   source: string | null;
   source_url: string;

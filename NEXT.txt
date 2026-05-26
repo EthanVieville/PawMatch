@@ -1,8 +1,20 @@
 - Peaufiner le LLMops et autres features du genre
-- docs de LLMops et autres features
+    - Plus de fonctionnalités LLMops : RAGAS et autres 
+    - DROP la base et relacner les scrappers pour tester le rewritten_description, vérifier que c'est bien intercepter et mis à jour par le LLM. Voir les rés sur le site + sur le backed (ca fonctionne déjà sur 10)
+- intégrer tout ca dans le bash etc...
+- docs de LLMops et autres features + fonction AI de rewritte description
 - schéma des services Docker 
 - schéma des données
 - schéma du AWS
 - uniformiser la doc 
 - README à clean : ya trop d'infos, même si utiles, y'a des trucs à tej, surtou tles cmd docker, vu qu'on as le bash mtn
 - slide (jsp si il en faut ? mais ca servira le ppt final de façon)
+
+
+-- NEXT TIMES 
+
+- On as une CI, faire la CD 
+- Les jobs ponctuels à passés en job daily (CRON sur scrappers etc...)
+- Si AWS pas suffisant actuellement, faire évoluer l'archi ^^
+    S3 pour les images et autres, faire du vrais stockage
+    Faire du ML sur AWS -> matière ml avec cloud sera validé en +
