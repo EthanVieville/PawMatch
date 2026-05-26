@@ -367,7 +367,7 @@ def stream_chat(
         "rag_chunks": 0,
         "error": False,
         "response_tokens": [],
-        "cacheable": animal_id is None and len(history) == 0,
+        "cacheable": animal_id is None,
         "cache_hit": False,
     }
 
