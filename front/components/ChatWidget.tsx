@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import Link from 'next/link'
+import MarkdownContent from './MarkdownContent'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -16,36 +16,6 @@ const WELCOME: Message = {
     "Bonjour ! Je suis PawBuddy 🐾 Je peux vous aider à trouver un animal à adopter, vous expliquer les démarches d'adoption, ou vous conseiller sur les soins. Que puis-je faire pour vous ?",
 }
 
-function renderLine(text: string, keyPrefix: string) {
-  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
-  const nodes: React.ReactNode[] = []
-  let lastIndex = 0
-  let match
-
-  while ((match = linkRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index))
-    nodes.push(
-      <Link
-        key={`${keyPrefix}-link-${match.index}`}
-        href={match[2]}
-        className="underline font-medium hover:opacity-80"
-        style={{ color: 'var(--accent)' }}
-      >
-        {match[1]}
-      </Link>
-    )
-    lastIndex = match.index + match[0].length
-  }
-  if (lastIndex < text.length) nodes.push(text.slice(lastIndex))
-  return nodes
-}
-
-function renderContent(text: string) {
-  return text.split('\n').flatMap((line, i) => {
-    const rendered = renderLine(line, String(i))
-    return i === 0 ? rendered : [<br key={`br-${i}`} />, ...rendered]
-  })
-}
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false)
@@ -244,7 +214,7 @@ export default function ChatWidget() {
                     ))}
                   </span>
                 ) : (
-                  renderContent(msg.content)
+                  <MarkdownContent text={msg.content} />
                 )}
               </div>
             </div>

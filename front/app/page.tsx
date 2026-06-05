@@ -125,6 +125,71 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── QUIZ CTA ─────────────────────────────────────────────────────── */}
+      <section className="max-w-6xl mx-auto px-6 pb-8">
+        <div
+          className="rounded-2xl overflow-hidden grid md:grid-cols-2"
+          style={{ border: '1px solid var(--border)' }}
+        >
+          {/* Gauche — texte */}
+          <div
+            className="p-10 flex flex-col justify-center"
+            style={{ background: 'var(--nav)' }}
+          >
+            <p className="text-white/60 uppercase tracking-widest text-xs font-semibold mb-3">
+              Vous ne savez pas par où commencer ?
+            </p>
+            <h2
+              className="text-5xl text-white uppercase tracking-wider leading-none mb-4"
+              style={{ fontFamily: 'var(--font-bebas), Impact, sans-serif' }}
+            >
+              Laissez PawBuddy vous guider
+            </h2>
+            <p className="leading-relaxed mb-8" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              Répondez à 6 questions sur votre mode de vie et découvrez les animaux faits pour vous — recommandés par notre IA directement depuis les refuges partenaires.
+            </p>
+            <a href="/quiz" className="btn-accent self-start text-base">
+              Faire le quiz →
+            </a>
+          </div>
+
+          {/* Droite — aperçu des étapes */}
+          <div
+            className="p-10 flex flex-col gap-3 justify-center"
+            style={{ background: 'var(--surface)' }}
+          >
+            {[
+              { n: 1, q: 'Quel animal souhaitez-vous adopter ?' },
+              { n: 2, q: 'Appartement ou maison avec jardin ?' },
+              { n: 3, q: 'Enfants, autres animaux à la maison ?' },
+            ].map(({ n, q }) => (
+              <div
+                key={n}
+                className="flex items-center gap-3 p-3 rounded-xl"
+                style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+              >
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                  style={{ background: 'var(--primary)' }}
+                >
+                  {n}
+                </div>
+                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{q}</span>
+              </div>
+            ))}
+            <div
+              className="flex items-center gap-3 p-3 rounded-xl"
+              style={{ background: 'rgba(181,80,26,0.07)', border: '2px solid var(--accent)' }}
+            >
+              <img src="/pawmatch-icone-patte.svg" alt="" className="w-6 h-6 flex-shrink-0" />
+              <span className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>
+                PawBuddy trouve votre match parfait
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA ──────────────────────────────────────────────────────────── */}
       <section className="pb-20 px-6">
         <div
