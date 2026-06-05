@@ -357,6 +357,7 @@ def stream_chat(
     animal_id: Optional[str],
     db: Session,
     bedrock_client,
+    source: Optional[str] = None,
 ) -> Generator[str, None, None]:
 
     _t = {
@@ -367,7 +368,7 @@ def stream_chat(
         "rag_chunks": 0,
         "error": False,
         "response_tokens": [],
-        "cacheable": animal_id is None,
+        "cacheable": animal_id is None and source != "quiz",
         "cache_hit": False,
     }
 
@@ -477,10 +478,11 @@ def stream_chat(
 
     finally:
         # Toujours tracé, même si le client ferme la connexion SSE avant la fin
+        _feature = source or "chat"
         if _t["cache_hit"]:
             _save_trace(
                 db=db,
-                feature="chat_cached",
+                feature=f"{_feature}_cached",
                 model_id=BEDROCK_MODEL,
                 input_tokens=0,
                 output_tokens=0,
@@ -492,7 +494,7 @@ def stream_chat(
         else:
             _save_trace(
                 db=db,
-                feature="chat",
+                feature=_feature,
                 model_id=BEDROCK_MODEL,
                 input_tokens=_t["input_tokens"],
                 output_tokens=_t["output_tokens"],

@@ -282,6 +282,7 @@ class ChatRequest(BaseModel):
     message: str
     animal_id: Optional[str] = None
     history: list[dict] = []
+    source: Optional[str] = None
 
 
 @app.post("/chat")
@@ -293,6 +294,7 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
             animal_id=request.animal_id,
             db=db,
             bedrock_client=app.state.bedrock,
+            source=request.source,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

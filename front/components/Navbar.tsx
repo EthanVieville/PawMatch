@@ -7,6 +7,7 @@ const LINKS = [
   { href: '/',        label: 'Accueil' },
   { href: '/animals', label: 'Animaux' },
   { href: '/map',     label: 'Carte' },
+  { href: '/quiz',    label: 'Quiz' },
 ];
 
 const WAVE_CLIP =
