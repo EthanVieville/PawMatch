@@ -214,18 +214,47 @@ Copier `.env.example` en `.env`. Toutes les variables ont des valeurs par défau
 
 ## CI / CD
 
-Chaque push sur `main` déclenche un workflow GitHub Actions (`.github/workflows/ci.yml`) qui rebuild les images Docker pour vérifier l'absence de régression.
+### Déploiement continu (CD)
 
-**Déploiement sur EC2 :**
-```bash
-git pull
-bash pawmatch.sh deploy    # rebuild + restart
+Chaque push sur `main` déclenche automatiquement `.github/workflows/deploy.yml` :
 
-# Si données à rafraîchir :
-bash pawmatch.sh data
+1. Démarre l'EC2 si elle est arrêtée (via AWS SDK)
+2. Ouvre le port 22 temporairement pour le runner GitHub Actions
+3. SSH → `git pull origin main` + `bash pawmatch.sh deploy`
+4. Referme le port 22
+5. Health check sur le port 3000
+
+Secrets GitHub requis : `AWS_DEPLOY_KEY_ID`, `AWS_DEPLOY_SECRET`, `EC2_INSTANCE_ID`, `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`.
+
+Le déploiement peut aussi être déclenché manuellement depuis GitHub Actions → **Run workflow**.
+
+---
+
+## Scraping automatique
+
+Le pipeline de données est géré par `.github/workflows/scrape.yml`. Il est **désactivé par défaut** pour garder le contrôle sur les coûts et le volume de données.
+
+**Déclencher un run manuel (recommandé pour tester) :**
+
+GitHub Actions → *Scrape — Daily data pipeline* → **Run workflow** → renseigner la limite d'animaux (défaut : 30 par source).
+
+**Activer le CRON quotidien (6h UTC) :**
+
+GitHub Actions → *Scrape — Daily data pipeline* → **Enable workflow**.
+
+**Désactiver :**
+
+Même endroit → **Disable workflow**.
+
+Ce que fait chaque run :
+```
+scraping La SPA + Seconde Chance (N animaux par source)
+  → calcul des embeddings (nouveaux animaux uniquement)
+  → géocodage des refuges (nouveaux refuges uniquement)
+  → réécriture des descriptions via Bedrock (nouveaux animaux uniquement)
 ```
 
-Le front est déployé sur **AWS Amplify** (déploiement automatique sur push `main`).
+Coût indicatif pour 30 animaux par source : **< $0.05** (rewrite Bedrock uniquement).
 
 ---
 
