@@ -1,0 +1,174 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="kyOn7FjrsSNK7tU0C4Cz" name="Page-1">
+    <mxGraphModel dx="2088" dy="1368" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ec2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5faf5;strokeColor=#6B7A58;strokeWidth=3;verticalAlign=top;fontSize=14;fontStyle=1;fontColor=#3D4A2E;arcSize=3;" value="☁️  AWS EC2 t3.small— Docker Compose" vertex="1">
+          <mxGeometry height="540" width="1060" x="150" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="gh" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3D4A2E;strokeColor=#3D4A2E;fontColor=#ffffff;fontStyle=1;fontSize=13;verticalAlign=top;" value="⚙️  GitHub Actions" vertex="1">
+          <mxGeometry height="110" width="1060" x="150" y="-70" as="geometry" />
+        </mxCell>
+        <mxCell id="cd" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#5a6e3e;strokeColor=#8aad5e;fontColor=#ffffff;fontSize=10;" value="&lt;b&gt;deploy.yml&lt;/b&gt;&lt;br&gt;push main : git pull + docker build" vertex="1">
+          <mxGeometry height="60" width="425" x="270" y="-30" as="geometry" />
+        </mxCell>
+        <mxCell id="scrapeGH" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#5a6e3e;strokeColor=#8aad5e;fontColor=#ffffff;fontSize=10;" value="&lt;b&gt;scrape.yml&lt;/b&gt;&lt;br&gt;manuel / quotidien : pawmatch.sh data 30" vertex="1">
+          <mxGeometry height="60" width="395" x="715" y="-30" as="geometry" />
+        </mxCell>
+        <mxCell id="user" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#555555;fontSize=11;fontStyle=1;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;👤&lt;br&gt;&lt;b style=&quot;&quot;&gt;Utilisateur&lt;/b&gt;&lt;br&gt;navigateur&lt;/font&gt;" vertex="1">
+          <mxGeometry height="540" width="140" x="-50" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="fe" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;verticalAlign=top;fontSize=11;fontStyle=1;" value="🖥️  Frontend : Next.js 14   :3000" vertex="1">
+          <mxGeometry height="185" width="255" x="175" y="147.5" as="geometry" />
+        </mxCell>
+        <mxCell id="fePages" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#93c5fd;fontSize=11;" value="Pages&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;animaux · carte · quiz · LLMOps&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="225" x="190" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="feChat" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#93c5fd;fontSize=11;" value="ChatWidget PawBuddy&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;widget flottant · historique localStorage&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="225" x="190" y="265" as="geometry" />
+        </mxCell>
+        <mxCell id="be" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1fae5;strokeColor=#10b981;strokeWidth=2;verticalAlign=top;fontSize=11;fontStyle=1;" value="⚡  Backend : FastAPI   :8000" vertex="1">
+          <mxGeometry height="185" width="295" x="460" y="147.5" as="geometry" />
+        </mxCell>
+        <mxCell id="beRest" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#6ee7b7;fontSize=11;" value="REST&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;/animals · /refuges · /predict-breed&lt;/font&gt;" vertex="1">
+          <mxGeometry height="45" width="265" x="475" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="beChat" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#6ee7b7;fontSize=11;" value="POST /chat — SSE streaming&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;RAG · cache sémantique · tool use&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="265" x="475" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="beAdmin" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#6ee7b7;fontSize=11;" value="/admin — Dashboard LLMOps&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;coûts · latences · traces · cache hit&lt;/font&gt;" vertex="1">
+          <mxGeometry height="35" width="265" x="475" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="db" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#f59e0b;strokeWidth=2;verticalAlign=top;fontSize=11;fontStyle=1;" value="🗄️  PostgreSQL 16 + pgvector" vertex="1">
+          <mxGeometry height="185" width="390" x="790" y="147.5" as="geometry" />
+        </mxCell>
+        <mxCell id="dbAnimals" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#fcd34d;fontSize=11;" value="animals · animal_images · refuges&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;embedding 384d (pgvector) · description_rewritten&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="360" x="805" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="dbKnow" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#fcd34d;fontSize=11;" value="knowledge_chunks · llm_traces · llm_cache&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;cache cosinus seuil 0.92 / TTL 24h&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="360" x="805" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="scrapers" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#8b5cf6;strokeWidth=2;verticalAlign=top;fontSize=11;fontStyle=1;" value="🕷️  Scrapers : Docker profiles (jobs ponctuels)" vertex="1">
+          <mxGeometry height="185" width="285" x="175" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="scrLaspa" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faf5ff;strokeColor=#c4b5fd;fontSize=11;" value="la-spa.fr&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;Selenium · MAX_PAGES=10 · ~200 animaux&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="255" x="190" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="scrSc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faf5ff;strokeColor=#c4b5fd;fontSize=11;" value="secondechance.org&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;Selenium · MAX_PAGES=3 × 3 espèces&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="255" x="190" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="pipeline" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe4e6;strokeColor=#f43f5e;strokeWidth=2;verticalAlign=top;fontSize=11;fontStyle=1;" value="🔧  Pipeline de données : Docker profiles (jobs ponctuels)" vertex="1">
+          <mxGeometry height="185" width="700" x="490" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="pEmb" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#fda4af;fontSize=11;" value="&lt;b&gt;Embedder&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;SentenceTransformer&lt;br/&gt;paraphrase-multilingual 384d&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65" width="195" x="500" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="pRew" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#fda4af;fontSize=11;" value="&lt;b&gt;Rewriter&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;Bedrock Claude Haiku&lt;br/&gt;descriptions FR réécrites&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65" width="195" x="715" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="pGeo" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#fda4af;fontSize=11;" value="&lt;b&gt;Refuge Seeder&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;Nominatim (OSM)&lt;br/&gt;géocodage lat / lng&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65" width="195" x="930" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="bedrock" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#e07800;fontColor=#ffffff;fontStyle=1;fontSize=11;" value="☁️  Amazon Bedrock&lt;br/&gt;&lt;b&gt;Claude Haiku 4.5&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;eu.anthropic.claude-haiku-4-5&lt;br/&gt;eu-west-1&lt;/font&gt;" vertex="1">
+          <mxGeometry height="540" width="140" x="1250" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="user" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#3b82f6;fontColor=#3b82f6;fontSize=9;fontStyle=1;endArrow=block;endFill=1;startSize=17;endSize=7;sourcePerimeterSpacing=0;targetPerimeterSpacing=0;strokeWidth=2;" target="fe" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;HTTP&lt;/font&gt;">
+          <mxGeometry relative="1" x="-0.2917" as="geometry">
+            <mxPoint y="-1" as="offset" />
+            <Array as="points">
+              <mxPoint x="160" y="435" />
+              <mxPoint x="160" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="fe" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#10b981;fontColor=#10b981;fontSize=9;fontStyle=1;endArrow=block;endFill=1;strokeWidth=2;" target="be" value="fetch /api/*">
+          <mxGeometry relative="1" x="0.3333" y="10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="440" y="230" />
+              <mxPoint x="440" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="be" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#f59e0b;fontColor=#f59e0b;fontSize=9;fontStyle=1;endArrow=block;endFill=1;strokeWidth=2;" target="db" value="CRUD">
+          <mxGeometry relative="1" x="-0.1429" y="10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="770" y="230" />
+              <mxPoint x="770" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="beChat" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#FF9900;fontColor=#FF9900;fontSize=9;fontStyle=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;strokeWidth=2;" target="bedrock" value="invoke_model">
+          <mxGeometry relative="1" x="0.0492" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="770" y="250" />
+              <mxPoint x="770" y="370" />
+            </Array>
+            <mxPoint x="1200" y="370" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="bedrock" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#FF9900;fontColor=#FF9900;fontSize=9;endArrow=block;endFill=1;strokeWidth=2;entryX=0.987;entryY=0.081;entryDx=0;entryDy=0;entryPerimeter=0;" target="be" value="tokens SSE">
+          <mxGeometry relative="1" x="0.0308" y="-10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="751" y="140" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="pRew" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#f43f5e;fontColor=#f43f5e;fontSize=9;fontStyle=1;endArrow=block;endFill=1;exitX=0.468;exitY=1.027;exitDx=0;exitDy=0;entryX=-0.006;entryY=0.888;entryDx=0;entryDy=0;entryPerimeter=0;exitPerimeter=0;" target="bedrock" value="invoke_model">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="806" y="580" />
+              <mxPoint x="910" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="scrapers" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#8b5cf6;fontColor=#8b5cf6;fontSize=9;fontStyle=1;endArrow=block;endFill=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0.128;entryY=1.009;entryDx=0;entryDy=0;entryPerimeter=0;strokeWidth=2;" target="db" value="upsert animaux">
+          <mxGeometry relative="1" x="-0.0004" y="10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="480" y="486" />
+              <mxPoint x="480" y="390" />
+              <mxPoint x="840" y="390" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="pEmb" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#f43f5e;fontColor=#f43f5e;fontSize=9;endArrow=block;endFill=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.279;entryY=0.999;entryDx=0;entryDy=0;entryPerimeter=0;" target="db" value="vecteurs 384d">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="pRew" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#f43f5e;fontColor=#f43f5e;fontSize=9;endArrow=block;endFill=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.576;entryY=1.001;entryDx=0;entryDy=0;entryPerimeter=0;" target="db" value="descriptions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="pGeo" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#f43f5e;fontColor=#f43f5e;fontSize=9;endArrow=block;endFill=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" value="lat/lng">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1028" y="411" />
+              <mxPoint x="1120" y="411" />
+              <mxPoint x="1120" y="333" />
+            </Array>
+            <mxPoint x="1120" y="333" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="cd" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#3D4A2E;fontColor=#3D4A2E;fontSize=9;fontStyle=1;endArrow=block;endFill=1;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;" target="ec2" value="SSH : git pull + deploy">
+          <mxGeometry relative="1" x="0.4444" y="-7" as="geometry">
+            <mxPoint x="2" y="-5" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="scrapeGH" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#3D4A2E;fontColor=#3D4A2E;fontSize=9;fontStyle=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;" target="scrapers" value="SSH → data pipeline">
+          <mxGeometry relative="1" x="-0.2311" y="-10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="913" y="80" />
+              <mxPoint x="440" y="80" />
+              <mxPoint x="440" y="410" />
+              <mxPoint x="318" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
