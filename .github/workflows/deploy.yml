@@ -70,6 +70,7 @@ jobs:
             set -e
             cd ~/Pa5emeAnn-e
             git pull origin main
+            docker system prune -f
             bash pawmatch.sh deploy
 
       # ── 5. Ferme le port 22 (toujours, même si le deploy a planté) ────────────

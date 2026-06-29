@@ -46,7 +46,7 @@ case "$1" in
 
   deploy)
     info "Rebuild + redémarrage (après git pull)..."
-    docker compose up --build --force-recreate -d
+    docker compose up --build --force-recreate -d || { warn "Build ou démarrage échoué !"; exit 1; }
     ok "deployed !"
     ;;
 
