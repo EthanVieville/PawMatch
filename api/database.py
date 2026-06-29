@@ -124,6 +124,9 @@ class LLMTrace(Base):
     tool_calls = Column(JSONB, nullable=True)      # [{"name": "search_animals", ...}]
     rag_chunks_used = Column(Integer, default=0)
     error = Column(Boolean, default=False)
+    feedback = Column(String, nullable=True)       # "positive" | "negative" | null
+    user_message = Column(Text, nullable=True)
+    assistant_response = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP, server_default="NOW()")
 
 
@@ -139,6 +142,15 @@ def init_db():
         ))
         conn.execute(text(
             "ALTER TABLE animals ADD COLUMN IF NOT EXISTS description_rewritten TEXT"
+        ))
+        conn.execute(text(
+            "ALTER TABLE llm_traces ADD COLUMN IF NOT EXISTS feedback VARCHAR"
+        ))
+        conn.execute(text(
+            "ALTER TABLE llm_traces ADD COLUMN IF NOT EXISTS user_message TEXT"
+        ))
+        conn.execute(text(
+            "ALTER TABLE llm_traces ADD COLUMN IF NOT EXISTS assistant_response TEXT"
         ))
         conn.commit()
     Base.metadata.create_all(engine)

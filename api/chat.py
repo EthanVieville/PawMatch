@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Generator, Optional
 
@@ -36,9 +37,13 @@ def _save_trace(
     tool_calls: list,
     rag_chunks_used: int,
     error: bool,
+    trace_id: Optional[uuid.UUID] = None,
+    user_message: Optional[str] = None,
+    assistant_response: Optional[str] = None,
 ) -> None:
     try:
         trace = LLMTrace(
+            id=trace_id or uuid.uuid4(),
             feature=feature,
             model_id=model_id,
             input_tokens=input_tokens,
@@ -48,6 +53,8 @@ def _save_trace(
             tool_calls=tool_calls or None,
             rag_chunks_used=rag_chunks_used,
             error=error,
+            user_message=user_message,
+            assistant_response=assistant_response,
         )
         db.add(trace)
         db.commit()
@@ -362,6 +369,7 @@ def stream_chat(
 
     _t = {
         "start": time.time(),
+        "trace_id": uuid.uuid4(),
         "input_tokens": 0,
         "output_tokens": 0,
         "tool_calls": [],
@@ -475,10 +483,12 @@ def stream_chat(
                 yield f"data: {json.dumps({'token': 'Désolé, une erreur est survenue. Veuillez réessayer.'})}\n\n"
 
         yield "data: [DONE]\n\n"
+        yield f"data: {json.dumps({'trace_id': str(_t['trace_id'])})}\n\n"
 
     finally:
         # Toujours tracé, même si le client ferme la connexion SSE avant la fin
         _feature = source or "chat"
+        _response_text = "".join(_t["response_tokens"]) or None
         if _t["cache_hit"]:
             _save_trace(
                 db=db,
@@ -490,6 +500,9 @@ def stream_chat(
                 tool_calls=[],
                 rag_chunks_used=0,
                 error=False,
+                trace_id=_t["trace_id"],
+                user_message=message,
+                assistant_response=_response_text,
             )
         else:
             _save_trace(
@@ -502,6 +515,9 @@ def stream_chat(
                 tool_calls=_t["tool_calls"],
                 rag_chunks_used=_t["rag_chunks"],
                 error=_t["error"],
+                trace_id=_t["trace_id"],
+                user_message=message,
+                assistant_response=_response_text,
             )
             if _t["cacheable"] and not _t["error"] and _t["response_tokens"]:
                 _store_cache(message, "".join(_t["response_tokens"]), db)

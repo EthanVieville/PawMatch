@@ -129,10 +129,31 @@ def _get_stats(db: Session) -> dict:
         FROM llm_traces
     """)).fetchone()
 
+    # Feedback utilisateur
+    feedback_row = db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE feedback IS NOT NULL)     AS total_feedback,
+            COUNT(*) FILTER (WHERE feedback = 'positive')   AS positive,
+            COUNT(*) FILTER (WHERE feedback = 'negative')   AS negative
+        FROM llm_traces
+        WHERE feature IN ('chat', 'quiz')
+    """)).fetchone()
+
+    # Traces avec feedback (pour l'onglet détail)
+    feedback_traces = db.execute(text("""
+        SELECT id, feature, created_at, feedback,
+               user_message, assistant_response, tool_calls, rag_chunks_used, latency_ms
+        FROM llm_traces
+        WHERE feedback IS NOT NULL
+          AND feature IN ('chat', 'quiz')
+        ORDER BY created_at DESC
+        LIMIT 200
+    """)).fetchall()
+
     # 100 dernières traces
     trace_rows = db.execute(text("""
         SELECT id, feature, model_id, input_tokens, output_tokens,
-               cost_usd, latency_ms, tool_calls, rag_chunks_used, error, created_at
+               cost_usd, latency_ms, tool_calls, rag_chunks_used, error, feedback, created_at
         FROM llm_traces
         ORDER BY created_at DESC
         LIMIT 100
@@ -142,7 +163,17 @@ def _get_stats(db: Session) -> dict:
     if tool_use_row.total_chat:
         tool_use_rate = round(tool_use_row.with_tools / tool_use_row.total_chat * 100, 1)
 
+    satisfaction_rate = 0.0
+    if feedback_row.total_feedback:
+        satisfaction_rate = round(feedback_row.positive / feedback_row.total_feedback * 100, 1)
+
     return {
+        "feedback": {
+            "total":             int(feedback_row.total_feedback),
+            "positive":          int(feedback_row.positive),
+            "negative":          int(feedback_row.negative),
+            "satisfaction_rate": satisfaction_rate,
+        },
         "total": {
             "calls":             int(total_row.calls),
             "cost_usd":          float(total_row.cost_usd),
@@ -201,9 +232,24 @@ def _get_stats(db: Session) -> dict:
                 "tool_calls":      r.tool_calls,
                 "rag_chunks_used": r.rag_chunks_used,
                 "error":           r.error,
+                "feedback":        r.feedback,
                 "created_at":      r.created_at.isoformat() if r.created_at else None,
             }
             for r in trace_rows
+        ],
+        "feedback_traces": [
+            {
+                "id":               str(r.id),
+                "feature":          r.feature,
+                "feedback":         r.feedback,
+                "user_message":     r.user_message or "",
+                "assistant_response": r.assistant_response or "",
+                "tool_calls":       r.tool_calls,
+                "rag_chunks_used":  r.rag_chunks_used,
+                "latency_ms":       r.latency_ms,
+                "created_at":       r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in feedback_traces
         ],
     }
 
@@ -217,6 +263,7 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PawMatch — LLMOps</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <style>
     body { background: #f0f2f5; font-family: system-ui, sans-serif; }
@@ -229,6 +276,7 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
     .kpi-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #6c757d; }
     .kpi-sub   { font-size: .78rem; color: #6c757d; margin-top: .2rem; }
     .kpi-sub b { color: #343a40; }
+    .kpi-feedback { border-color: #20c997; }
     .section-title { font-size: .82rem; font-weight: 700; text-transform: uppercase;
                      letter-spacing: .07em; color: #6c757d; margin-bottom: .8rem; }
     .table th { font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; color: #6c757d; }
@@ -249,6 +297,22 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
 </nav>
 
 <div class="container-fluid px-4">
+
+  <!-- ── Onglets ── -->
+  <ul class="nav nav-tabs mb-4" id="mainTabs">
+    <li class="nav-item">
+      <a class="nav-link active" data-bs-toggle="tab" href="#tab-overview">Vue d'ensemble</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" data-bs-toggle="tab" href="#tab-feedback">
+        Feedback
+        <span class="badge ms-1 __BADGE_NEG_CLASS__">__KPI_FB_NEG__ &#128078;</span>
+      </a>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+  <div class="tab-pane fade show active" id="tab-overview">
 
   <!-- ── KPIs ── -->
   <div class="row g-3 mb-4">
@@ -288,6 +352,15 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
         <div class="kpi-value text-warning">__KPI_ERRORS__</div>
         <div class="kpi-sub"><b>__KPI_ERROR_RATE__%</b> taux d'erreur</div>
         <div class="kpi-sub mt-1">Sur __KPI_CALLS__ appels totaux</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="card kpi-card kpi-feedback h-100 p-3">
+        <div class="kpi-label">Satisfaction utilisateur</div>
+        <div class="kpi-value" style="color:#20c997;">__KPI_SATISFACTION__%</div>
+        <div class="kpi-sub">&#128077; <b>__KPI_FB_POS__</b> &nbsp;&#128078; <b>__KPI_FB_NEG__</b></div>
+        <div class="kpi-sub mt-1"><b>__KPI_FB_TOTAL__</b> réponses notées</div>
       </div>
     </div>
 
@@ -449,7 +522,7 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
               <tr>
                 <th>Date</th><th>Feature</th><th>Modele</th>
                 <th>In / Out</th><th>Cout</th><th>Latence</th>
-                <th>Tools</th><th>RAG</th><th>Statut</th>
+                <th>Tools</th><th>RAG</th><th>Feedback</th><th>Statut</th>
               </tr>
             </thead>
             <tbody>__TBODY_TRACES__</tbody>
@@ -458,6 +531,36 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
   </div>
+
+  </div><!-- /tab-overview -->
+
+  <!-- ══ Onglet Feedback ══════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade" id="tab-feedback">
+
+    <!-- Filtres -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary active" id="fb-all"      onclick="filterFeedback('all')">Tous (__KPI_FB_TOTAL__)</button>
+        <button class="btn btn-sm btn-outline-success"          id="fb-positive" onclick="filterFeedback('positive')">&#128077; Positifs (__KPI_FB_POS__)</button>
+        <button class="btn btn-sm btn-outline-danger"           id="fb-negative" onclick="filterFeedback('negative')">&#128078; Negatifs (__KPI_FB_NEG__)</button>
+      </div>
+      <div class="vr mx-1"></div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary active" id="src-all"  onclick="filterSource('all')">Toutes sources</button>
+        <button class="btn btn-sm btn-outline-primary"          id="src-chat" onclick="filterSource('chat')">&#128172; Chatbot</button>
+        <button class="btn btn-sm btn-outline-warning"          id="src-quiz" onclick="filterSource('quiz')">&#10067; Quiz</button>
+      </div>
+    </div>
+
+    <div id="feedback-list">__FEEDBACK_CARDS__</div>
+
+    <p id="fb-empty" class="text-muted text-center py-5" style="display:none;">
+      Aucune réponse notée pour ce filtre.
+    </p>
+
+  </div><!-- /tab-feedback -->
+
+  </div><!-- /tab-content -->
 
 </div>
 
@@ -486,7 +589,7 @@ new Chart(document.getElementById('chart-daily'), {
 });
 
 // Feature donut
-const FEAT_COLORS = { chat: '#0d6efd', description_rewrite: '#6f42c1', chat_cached: '#20c997' };
+const FEAT_COLORS = { chat: '#0d6efd', description_rewrite: '#6f42c1', chat_cached: '#20c997', quiz: '#ffc107' };
 new Chart(document.getElementById('chart-features'), {
   type: 'doughnut',
   data: {
@@ -522,6 +625,53 @@ if (TOP_TOOLS.length > 0) {
     },
   });
 }
+
+// ── Toggle texte complet ──────────────────────────────────────────────────────
+function toggleFull(id) {
+  const short = document.getElementById(id + '-short');
+  const full  = document.getElementById(id + '-full');
+  const link  = event.target;
+  if (full.style.display === 'none') {
+    short.style.display = 'none';
+    full.style.display  = '';
+    link.textContent    = 'Réduire';
+  } else {
+    short.style.display = '';
+    full.style.display  = 'none';
+    link.textContent    = 'Voir tout';
+  }
+}
+
+// ── Filtres onglet Feedback (feedback type + source) ─────────────────────────
+let _activeFb  = 'all';
+let _activeSrc = 'all';
+
+function applyFilters() {
+  document.querySelectorAll('[data-fb]').forEach(el => {
+    const fbOk  = _activeFb  === 'all' || el.dataset.fb      === _activeFb;
+    const srcOk = _activeSrc === 'all' || el.dataset.feature  === _activeSrc;
+    el.style.display = (fbOk && srcOk) ? '' : 'none';
+  });
+  const visible = document.querySelectorAll('[data-fb]').length -
+                  document.querySelectorAll('[data-fb][style*="display: none"]').length;
+  document.getElementById('fb-empty').style.display = visible === 0 ? '' : 'none';
+}
+
+function filterFeedback(type) {
+  _activeFb = type;
+  ['all','positive','negative'].forEach(t =>
+    document.getElementById('fb-' + t).classList.toggle('active', t === type)
+  );
+  applyFilters();
+}
+
+function filterSource(src) {
+  _activeSrc = src;
+  ['all','chat','quiz'].forEach(t =>
+    document.getElementById('src-' + t).classList.toggle('active', t === src)
+  );
+  applyFilters();
+}
 </script>
 </body>
 </html>"""
@@ -530,7 +680,7 @@ if (TOP_TOOLS.length > 0) {
 # ── Helpers de rendu ───────────────────────────────────────────────────────────
 
 def _badge(feature: str) -> str:
-    cls = "primary" if feature == "chat" else "secondary"
+    cls = {"chat": "primary", "quiz": "warning", "chat_cached": "info"}.get(feature, "secondary")
     return f'<span class="badge bg-{cls}">{feature}</span>'
 
 
@@ -573,6 +723,10 @@ def _render(stats: dict, token: str) -> str:
         tools  = ", ".join(tc["name"] for tc in r["tool_calls"]) if r["tool_calls"] else "—"
         status = ('<span class="badge bg-danger">erreur</span>'
                   if r["error"] else '<span class="badge bg-success">ok</span>')
+        fb = r.get("feedback")
+        feedback_cell = ('&#128077;' if fb == "positive"
+                         else '&#128078;' if fb == "negative"
+                         else '<span class="text-muted">—</span>')
         dt = r["created_at"][:16].replace("T", " ") if r["created_at"] else "—"
         model_short = r["model_id"].split(".")[-1] if "." in r["model_id"] else r["model_id"]
         trace_rows += (
@@ -584,6 +738,7 @@ def _render(stats: dict, token: str) -> str:
             f'<td>{r["latency_ms"]} ms</td>'
             f'<td><small>{tools}</small></td>'
             f'<td>{r["rag_chunks_used"] or 0}</td>'
+            f'<td>{feedback_cell}</td>'
             f'<td>{status}</td></tr>'
         )
 
@@ -592,8 +747,58 @@ def _render(stats: dict, token: str) -> str:
 
     now = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
 
+    fb  = stats["feedback"]
+
+    # Cartes feedback détaillées
+    feedback_cards = ""
+    for r in stats["feedback_traces"]:
+        is_pos  = r["feedback"] == "positive"
+        border  = "#198754" if is_pos else "#dc3545"
+        icon    = "👍" if is_pos else "👎"
+        label   = "Positif" if is_pos else "Negatif"
+        badge   = "success" if is_pos else "danger"
+        tools   = ", ".join(tc["name"] for tc in r["tool_calls"]) if r["tool_calls"] else "—"
+        dt      = r["created_at"][:16].replace("T", " ") if r["created_at"] else "—"
+        q_text   = r["user_message"][:200] + ("…" if len(r["user_message"]) > 200 else "")
+        a_short  = r["assistant_response"][:300] + ("…" if len(r["assistant_response"]) > 300 else "")
+        a_full   = r["assistant_response"].replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
+        card_id  = "fb-" + r["id"][:8]
+        voir_tout = (
+            '<a href="#" class="ms-1 small" onclick="toggleFull(\'' + card_id + '\');return false;">Voir tout</a>'
+            if len(r["assistant_response"]) > 300 else ""
+        )
+        feedback_cards += (
+            '<div class="card mb-3" data-fb="' + r["feedback"] + '" data-feature="' + r["feature"] + '" style="border-left:4px solid ' + border + ';">'
+            '<div class="card-body py-3">'
+            '<div class="d-flex justify-content-between align-items-start mb-2">'
+            '<span class="badge bg-' + badge + '">' + icon + ' ' + label + '</span>'
+            '<span class="text-muted small">' + dt + ' &middot; ' + r["feature"] + ' &middot; ' + str(r["latency_ms"]) + ' ms'
+            ' &middot; RAG ' + str(r["rag_chunks_used"] or 0) + ' &middot; Tools: ' + tools + '</span>'
+            '</div>'
+            '<div class="mb-2">'
+            '<div class="small text-muted fw-semibold mb-1">Question utilisateur</div>'
+            '<div class="p-2 rounded" style="background:#f8f9fa;font-size:.85rem;">' + q_text + '</div>'
+            '</div>'
+            '<div>'
+            '<div class="small text-muted fw-semibold mb-1">Réponse PawBuddy</div>'
+            '<div class="p-2 rounded" style="background:#f8f9fa;font-size:.85rem;">'
+            '<span id="' + card_id + '-short">' + a_short + '</span>'
+            '<span id="' + card_id + '-full" style="display:none;">' + a_full + '</span>'
+            + voir_tout +
+            '</div>'
+            '</div>'
+            '</div>'
+            '</div>\n'
+        )
+
     html = _ADMIN_TEMPLATE
     html = html.replace("__TOKEN__",              token)
+    html = html.replace("__KPI_SATISFACTION__",   str(fb["satisfaction_rate"]))
+    html = html.replace("__KPI_FB_POS__",         str(fb["positive"]))
+    html = html.replace("__KPI_FB_NEG__",         str(fb["negative"]))
+    html = html.replace("__KPI_FB_TOTAL__",       str(fb["total"]))
+    html = html.replace("__BADGE_NEG_CLASS__",    "bg-danger" if fb["negative"] > 0 else "bg-secondary")
+    html = html.replace("__FEEDBACK_CARDS__",     feedback_cards if feedback_cards else "")
     html = html.replace("__GENERATED_AT__",       now)
     html = html.replace("__KPI_COST__",           f'${t["cost_usd"]:.5f}')
     html = html.replace("__KPI_TOKENS__",         f'{t["input_tokens"] + t["output_tokens"]:,}')
