@@ -126,6 +126,8 @@ export default function QuizPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [phase, setPhase]     = useState<Phase>('quiz')
   const [result, setResult]   = useState('')
+  const [traceId, setTraceId] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null)
   const resultRef = useRef<HTMLDivElement>(null)
 
   const current = QUESTIONS[step]
@@ -189,8 +191,9 @@ export default function QuizPage() {
           const data = line.slice(6).trim()
           if (data === '[DONE]') continue
           try {
-            const { token } = JSON.parse(data)
-            if (token) setResult(prev => prev + token)
+            const parsed = JSON.parse(data)
+            if (parsed.token) setResult(prev => prev + parsed.token)
+            else if (parsed.trace_id) setTraceId(parsed.trace_id)
           } catch {}
         }
       }
@@ -207,6 +210,20 @@ export default function QuizPage() {
     setSelected(null)
     setPhase('quiz')
     setResult('')
+    setTraceId(null)
+    setFeedback(null)
+  }
+
+  const sendFeedback = async (rating: 'positive' | 'negative') => {
+    if (!traceId || feedback) return
+    setFeedback(rating)
+    try {
+      await fetch('/api/chat/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trace_id: traceId, rating }),
+      })
+    } catch {}
   }
 
   const cols = current?.options.length === 2 ? 'grid-cols-2' : 'grid-cols-2'
@@ -425,13 +442,47 @@ export default function QuizPage() {
 
             {/* Actions */}
             {phase === 'done' && (
-              <div className="flex gap-3 flex-wrap">
-                <button onClick={resetQuiz} className="btn-secondary">
-                  ← Refaire le quiz
-                </button>
-                <Link href="/animals" className="btn-primary flex-1 justify-center">
-                  Parcourir tous les animaux →
-                </Link>
+              <div className="flex flex-col gap-3">
+                {traceId && (
+                  <div
+                    className="flex items-center gap-3 rounded-xl px-4 py-3"
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+                  >
+                    <span className="text-sm flex-1" style={{ color: 'var(--text-muted)' }}>
+                      {feedback
+                        ? feedback === 'positive'
+                          ? '👍 Merci pour votre retour !'
+                          : '👎 Merci, on va améliorer ça !'
+                        : 'Ces recommandations vous correspondent ?'}
+                    </span>
+                    {!feedback && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => sendFeedback('positive')}
+                          className="text-xl leading-none transition-transform hover:scale-125"
+                          title="Oui, pertinent"
+                        >
+                          👍
+                        </button>
+                        <button
+                          onClick={() => sendFeedback('negative')}
+                          className="text-xl leading-none transition-transform hover:scale-125"
+                          title="Non, pas vraiment"
+                        >
+                          👎
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="flex gap-3 flex-wrap">
+                  <button onClick={resetQuiz} className="btn-secondary">
+                    ← Refaire le quiz
+                  </button>
+                  <Link href="/animals" className="btn-primary flex-1 justify-center">
+                    Parcourir tous les animaux →
+                  </Link>
+                </div>
               </div>
             )}
           </div>

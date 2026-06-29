@@ -6,14 +6,14 @@ from typing import Optional
 import boto3
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from admin import router as admin_router
 from chat import stream_chat, _get_encoder
-from database import Animal, AnimalImage, Refuge, get_db, init_db
+from database import Animal, AnimalImage, LLMTrace, Refuge, get_db, init_db
 
 # ── Synonym mapping pour la recherche intelligente ────────────────────────────
 _SPECIES_SYNONYMS: dict[str, str] = {
@@ -299,6 +299,28 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+class FeedbackRequest(BaseModel):
+    trace_id: str
+    rating: str  # "positive" | "negative"
+
+
+@app.post("/chat/feedback", status_code=204)
+def chat_feedback(body: FeedbackRequest, db: Session = Depends(get_db)):
+    import uuid as _uuid
+    if body.rating not in ("positive", "negative"):
+        raise HTTPException(status_code=400, detail="rating doit être 'positive' ou 'negative'")
+    try:
+        trace_id = _uuid.UUID(body.trace_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="trace_id invalide")
+    trace = db.query(LLMTrace).filter(LLMTrace.id == trace_id).first()
+    if not trace:
+        raise HTTPException(status_code=404, detail="Trace introuvable")
+    trace.feedback = body.rating
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.get("/chat/test")

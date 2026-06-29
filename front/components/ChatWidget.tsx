@@ -6,6 +6,8 @@ import MarkdownContent from './MarkdownContent'
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  traceId?: string
+  feedback?: 'positive' | 'negative'
 }
 
 const STORAGE_KEY = 'pawmatch_chat_history'
@@ -84,13 +86,22 @@ export default function ChatWidget() {
           const data = line.slice(6).trim()
           if (data === '[DONE]') continue
           try {
-            const { token } = JSON.parse(data)
-            if (token) {
+            const parsed = JSON.parse(data)
+            if (parsed.token) {
               setMessages(prev => {
                 const updated = [...prev]
                 updated[updated.length - 1] = {
                   ...updated[updated.length - 1],
-                  content: updated[updated.length - 1].content + token,
+                  content: updated[updated.length - 1].content + parsed.token,
+                }
+                return updated
+              })
+            } else if (parsed.trace_id) {
+              setMessages(prev => {
+                const updated = [...prev]
+                updated[updated.length - 1] = {
+                  ...updated[updated.length - 1],
+                  traceId: parsed.trace_id,
                 }
                 return updated
               })
@@ -122,6 +133,23 @@ export default function ChatWidget() {
   const clearHistory = () => {
     setMessages([WELCOME])
     localStorage.removeItem(STORAGE_KEY)
+  }
+
+  const sendFeedback = async (index: number, rating: 'positive' | 'negative') => {
+    const msg = messages[index]
+    if (!msg.traceId || msg.feedback) return
+    setMessages(prev => {
+      const updated = [...prev]
+      updated[index] = { ...updated[index], feedback: rating }
+      return updated
+    })
+    try {
+      await fetch('/api/chat/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trace_id: msg.traceId, rating }),
+      })
+    } catch {}
   }
 
   return (
@@ -187,7 +215,7 @@ export default function ChatWidget() {
           {messages.map((msg, i) => (
             <div
               key={i}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
             >
               <div
                 className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
@@ -217,6 +245,29 @@ export default function ChatWidget() {
                   <MarkdownContent text={msg.content} />
                 )}
               </div>
+
+              {msg.role === 'assistant' && msg.traceId && msg.content !== '' && (
+                <div className="flex gap-1 mt-1 px-1">
+                  <button
+                    onClick={() => sendFeedback(i, 'positive')}
+                    disabled={!!msg.feedback}
+                    title="Réponse utile"
+                    className="text-base leading-none transition-opacity disabled:cursor-default"
+                    style={{ opacity: msg.feedback && msg.feedback !== 'positive' ? 0.25 : 1 }}
+                  >
+                    👍
+                  </button>
+                  <button
+                    onClick={() => sendFeedback(i, 'negative')}
+                    disabled={!!msg.feedback}
+                    title="Réponse à améliorer"
+                    className="text-base leading-none transition-opacity disabled:cursor-default"
+                    style={{ opacity: msg.feedback && msg.feedback !== 'negative' ? 0.25 : 1 }}
+                  >
+                    👎
+                  </button>
+                </div>
+              )}
             </div>
           ))}
           <div ref={messagesEndRef} />
