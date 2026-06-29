@@ -70,8 +70,10 @@ jobs:
             set -e
             cd ~/Pa5emeAnn-e
             git pull origin main
-            docker system prune -f
-            bash pawmatch.sh deploy
+            docker system prune -af --volumes=false
+            docker compose build api
+            docker compose build front
+            docker compose up -d --force-recreate
 
       # ── 5. Ferme le port 22 (toujours, même si le deploy a planté) ────────────
       - name: Revoke SSH rule
