@@ -100,9 +100,13 @@ def parse_fiche(driver, url):
                 seen.add(label)
     incompatibilities = list(seen)
 
-    # Images — collect ALL animal images, not just the first one
+    # Images — scope to the main animal banner to exclude "related animals" thumbnails
+    # .c-banner-animal is the BEM block that wraps all per-animal info (confirmed by
+    # the c-banner-animal_info-key / c-banner-animal_info-more selectors above).
+    # Related-animal sections below the fold use different container classes.
+    gallery_scope = soup.select_one(".c-banner-animal") or soup
     images = []
-    for img in soup.select("img[src*='/uploads/animals/']"):
+    for img in gallery_scope.select("img[src*='/uploads/animals/']"):
         src = img.get("src", "")
         if src.startswith("/"):
             src = "https://www.la-spa.fr" + src

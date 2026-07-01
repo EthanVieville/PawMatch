@@ -141,6 +141,23 @@ services:
     profiles:
       - rewriter
 
+  # ── Cleaner (validation URLs — supprime les animaux retirés des sources) ────
+  # docker compose --profile cleanup run --rm cleaner
+  # Lancé automatiquement en fin de pipeline data (bash pawmatch.sh data)
+  cleaner:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://pawmatch:pawmatch@postgres:5432/pawmatch
+      - CLEANUP_SOURCE=la-spa
+    command: ["python", "cleanup.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - cleanup
+
   # ── Refuge Seeder (géocodage Nominatim — après chaque scraping) ──────────
   # docker compose --profile refuge-seeder run --rm refuge-seeder
   refuge-seeder:
