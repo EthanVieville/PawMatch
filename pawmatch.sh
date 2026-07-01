@@ -26,6 +26,22 @@ case "$1" in
     info "[1/7] Build et démarrage des services (postgres + api + front)..."
     docker compose up --build -d || { warn "Échec du build ou du démarrage !"; exit 1; }
 
+    info "    Attente que l'API soit prête (init DB + pgvector + chargement modèle)..."
+    max_wait=120
+    waited=0
+    until curl -sf http://localhost:8000/health > /dev/null 2>&1; do
+      printf '.'
+      sleep 4
+      waited=$((waited + 4))
+      if [ "$waited" -ge "$max_wait" ]; then
+        echo ""
+        warn "L'API n'a pas répondu en ${max_wait}s — vérifiez : docker compose logs api"
+        exit 1
+      fi
+    done
+    echo ""
+    ok "API prête."
+
     info "[2/7] Seeding base de connaissances PawBuddy..."
     docker compose --profile seeder run --rm seeder
 
