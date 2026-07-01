@@ -143,29 +143,23 @@ class CleanupRun(Base):
 
 
 def init_db():
+    # 1) Extension pgvector (doit exister avant create_all car le modèle Vector en dépend)
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        # Migration safe : ajoute les colonnes si elles n'existent pas encore
-        conn.execute(text(
-            "ALTER TABLE animals ADD COLUMN IF NOT EXISTS race_predicted VARCHAR"
-        ))
-        conn.execute(text(
-            "ALTER TABLE animals ADD COLUMN IF NOT EXISTS race_confidence FLOAT"
-        ))
-        conn.execute(text(
-            "ALTER TABLE animals ADD COLUMN IF NOT EXISTS description_rewritten TEXT"
-        ))
-        conn.execute(text(
-            "ALTER TABLE llm_traces ADD COLUMN IF NOT EXISTS feedback VARCHAR"
-        ))
-        conn.execute(text(
-            "ALTER TABLE llm_traces ADD COLUMN IF NOT EXISTS user_message TEXT"
-        ))
-        conn.execute(text(
-            "ALTER TABLE llm_traces ADD COLUMN IF NOT EXISTS assistant_response TEXT"
-        ))
         conn.commit()
+
+    # 2) Création de toutes les tables (idempotent — no-op si elles existent déjà)
     Base.metadata.create_all(engine)
+
+    # 3) Migrations additionnelles — les tables existent maintenant, ALTER TABLE est safe
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE animals ADD COLUMN IF NOT EXISTS race_predicted VARCHAR"))
+        conn.execute(text("ALTER TABLE animals ADD COLUMN IF NOT EXISTS race_confidence FLOAT"))
+        conn.execute(text("ALTER TABLE animals ADD COLUMN IF NOT EXISTS description_rewritten TEXT"))
+        conn.execute(text("ALTER TABLE llm_traces ADD COLUMN IF NOT EXISTS feedback VARCHAR"))
+        conn.execute(text("ALTER TABLE llm_traces ADD COLUMN IF NOT EXISTS user_message TEXT"))
+        conn.execute(text("ALTER TABLE llm_traces ADD COLUMN IF NOT EXISTS assistant_response TEXT"))
+        conn.commit()
 
 
 def get_db():
