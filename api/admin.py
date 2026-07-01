@@ -150,6 +150,34 @@ def _get_stats(db: Session) -> dict:
         LIMIT 200
     """)).fetchall()
 
+    # Cleanup runs — historique nettoyage
+    cleanup_summary_row = db.execute(text("""
+        SELECT
+            COUNT(*)                             AS total_runs,
+            COALESCE(SUM(animals_removed), 0)    AS total_removed,
+            COALESCE(SUM(animals_checked), 0)    AS total_checked,
+            MAX(run_at)                          AS last_run_at
+        FROM cleanup_runs
+    """)).fetchone()
+
+    cleanup_by_source_rows = db.execute(text("""
+        SELECT
+            source,
+            COUNT(*)                            AS runs,
+            COALESCE(SUM(animals_checked), 0)   AS checked,
+            COALESCE(SUM(animals_removed), 0)   AS removed
+        FROM cleanup_runs
+        GROUP BY source
+        ORDER BY removed DESC
+    """)).fetchall()
+
+    cleanup_recent_rows = db.execute(text("""
+        SELECT id, run_at, source, animals_checked, animals_removed, removed_names
+        FROM cleanup_runs
+        ORDER BY run_at DESC
+        LIMIT 50
+    """)).fetchall()
+
     # 100 dernières traces
     trace_rows = db.execute(text("""
         SELECT id, feature, model_id, input_tokens, output_tokens,
@@ -158,6 +186,52 @@ def _get_stats(db: Session) -> dict:
         ORDER BY created_at DESC
         LIMIT 100
     """)).fetchall()
+
+    # Volume d'usage par jour (appels LLM, indépendant du coût)
+    usage_daily_rows = db.execute(text("""
+        SELECT
+            DATE(created_at AT TIME ZONE 'UTC') AS day,
+            COUNT(*)                            AS calls
+        FROM llm_traces
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+          AND feature IN ('chat', 'chat_cached', 'quiz')
+        GROUP BY day
+        ORDER BY day
+    """)).fetchall()
+
+    # Distribution horaire des usages
+    usage_hourly_rows = db.execute(text("""
+        SELECT
+            EXTRACT(HOUR FROM created_at AT TIME ZONE 'UTC')::INTEGER AS hour,
+            COUNT(*) AS calls
+        FROM llm_traces
+        WHERE feature IN ('chat', 'chat_cached', 'quiz')
+        GROUP BY hour
+        ORDER BY hour
+    """)).fetchall()
+
+    # Espèces les plus recherchées (depuis tool_calls JSONB)
+    species_rows = db.execute(text("""
+        SELECT
+            COALESCE(tool->'input'->>'species', 'non précisée') AS species,
+            COUNT(*) AS cnt
+        FROM llm_traces,
+             jsonb_array_elements(tool_calls) AS tool
+        WHERE tool->>'name' = 'search_animals'
+          AND tool_calls IS NOT NULL
+          AND jsonb_typeof(tool_calls) = 'array'
+        GROUP BY species
+        ORDER BY cnt DESC
+        LIMIT 6
+    """)).fetchall()
+
+    # Taux d'engagement feedback (% d'interactions qui ont reçu un feedback)
+    feedback_engage_row = db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE feature IN ('chat', 'chat_cached', 'quiz'))                              AS total_interactions,
+            COUNT(*) FILTER (WHERE feature IN ('chat', 'chat_cached', 'quiz') AND feedback IS NOT NULL)     AS rated
+        FROM llm_traces
+    """)).fetchone()
 
     tool_use_rate = 0.0
     if tool_use_row.total_chat:
@@ -237,6 +311,32 @@ def _get_stats(db: Session) -> dict:
             }
             for r in trace_rows
         ],
+        "cleanup": {
+            "total_runs":    int(cleanup_summary_row.total_runs),
+            "total_removed": int(cleanup_summary_row.total_removed),
+            "total_checked": int(cleanup_summary_row.total_checked),
+            "last_run_at":   cleanup_summary_row.last_run_at.isoformat() if cleanup_summary_row.last_run_at else None,
+            "by_source": [
+                {
+                    "source":  r.source,
+                    "runs":    int(r.runs),
+                    "checked": int(r.checked),
+                    "removed": int(r.removed),
+                }
+                for r in cleanup_by_source_rows
+            ],
+            "recent_runs": [
+                {
+                    "id":            str(r.id),
+                    "run_at":        r.run_at.isoformat() if r.run_at else None,
+                    "source":        r.source,
+                    "checked":       r.animals_checked,
+                    "removed":       r.animals_removed,
+                    "removed_names": r.removed_names or [],
+                }
+                for r in cleanup_recent_rows
+            ],
+        },
         "feedback_traces": [
             {
                 "id":               str(r.id),
@@ -251,6 +351,25 @@ def _get_stats(db: Session) -> dict:
             }
             for r in feedback_traces
         ],
+        "usage_daily": [
+            {"date": str(r.day), "calls": int(r.calls)}
+            for r in usage_daily_rows
+        ],
+        "usage_hourly": [
+            {"hour": int(r.hour), "calls": int(r.calls)}
+            for r in usage_hourly_rows
+        ],
+        "species_searched": [
+            {"species": r.species, "cnt": int(r.cnt)}
+            for r in species_rows
+        ],
+        "feedback_engage": {
+            "total": int(feedback_engage_row.total_interactions),
+            "rated": int(feedback_engage_row.rated),
+            "pct":   round(
+                int(feedback_engage_row.rated) / int(feedback_engage_row.total_interactions) * 100, 1
+            ) if feedback_engage_row.total_interactions else 0.0,
+        },
     }
 
 
@@ -261,7 +380,7 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PawMatch — LLMOps</title>
+  <title>PawMatch — Administration</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -289,7 +408,7 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
 <body>
 
 <nav class="navbar navbar-dark bg-dark mb-4 px-4">
-  <span class="navbar-brand fw-bold">&#x1F43E; PawMatch &mdash; LLMOps</span>
+  <span class="navbar-brand fw-bold">&#x1F43E; PawMatch &mdash; Administration</span>
   <span class="d-flex align-items-center gap-3">
     <span class="text-muted small">__GENERATED_AT__</span>
     <a href="?token=__TOKEN__" class="btn btn-outline-light btn-sm">&#x21BB; Rafraichir</a>
@@ -301,12 +420,18 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
   <!-- ── Onglets ── -->
   <ul class="nav nav-tabs mb-4" id="mainTabs">
     <li class="nav-item">
-      <a class="nav-link active" data-bs-toggle="tab" href="#tab-overview">Vue d'ensemble</a>
+      <a class="nav-link active" data-bs-toggle="tab" href="#tab-overview">Monitoring IA</a>
     </li>
     <li class="nav-item">
       <a class="nav-link" data-bs-toggle="tab" href="#tab-feedback">
         Feedback
         <span class="badge ms-1 __BADGE_NEG_CLASS__">__KPI_FB_NEG__ &#128078;</span>
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" data-bs-toggle="tab" href="#tab-cleanup">
+        Catalogue
+        <span class="badge ms-1 bg-secondary">__DB_TOTAL__ animaux</span>
       </a>
     </li>
   </ul>
@@ -388,57 +513,16 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- ── Statut DB + Top tools ── -->
+  <!-- ── Top tools ── -->
   <div class="row g-3 mb-4">
-
-    <div class="col-md-5">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="section-title">Statut base de donnees</div>
-
-          <div class="d-flex justify-content-between align-items-baseline mb-1">
-            <span class="small fw-semibold">Animaux total</span>
-            <span class="small text-muted">__DB_TOTAL__</span>
-          </div>
-
-          <div class="mb-3">
-            <div class="d-flex justify-content-between mb-1">
-              <small>Descriptions reecrites</small>
-              <small><b>__DB_REWRITTEN__</b> / __DB_TOTAL__ &nbsp;(__DB_REWRITTEN_PCT__%)</small>
-            </div>
-            <div class="progress" style="height:8px;">
-              <div class="progress-bar __DB_REWRITTEN_COLOR__" style="width:__DB_REWRITTEN_PCT__%"></div>
-            </div>
-          </div>
-
-          <div class="mb-2">
-            <div class="d-flex justify-content-between mb-1">
-              <small>Embeddings calcules</small>
-              <small><b>__DB_EMBEDDED__</b> / __DB_TOTAL__ &nbsp;(__DB_EMBEDDED_PCT__%)</small>
-            </div>
-            <div class="progress" style="height:8px;">
-              <div class="progress-bar __DB_EMBEDDED_COLOR__" style="width:__DB_EMBEDDED_PCT__%"></div>
-            </div>
-          </div>
-
-          <hr class="my-3">
-          <div class="small text-muted">
-            <span class="me-3">&#128464; <b>__DB_REWRITTEN__</b> fiches avec description LLM</span><br>
-            <span>&#128200; <b>__DB_NOT_REWRITTEN__</b> fiches restantes a traiter</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-7">
-      <div class="card h-100">
+    <div class="col-12">
+      <div class="card">
         <div class="card-body">
           <div class="section-title">Top tools appeles par le LLM</div>
           <canvas id="chart-tools" height="__CHART_TOOLS_HEIGHT__"></canvas>
         </div>
       </div>
     </div>
-
   </div>
 
   <!-- ── Cache semantique ── -->
@@ -482,6 +566,48 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
             </div>
 
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Analyse des usages ── -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card h-100 p-3">
+        <div class="kpi-label">Engagement feedback</div>
+        <div class="kpi-value" style="color:#6f42c1;">__FB_ENGAGE_PCT__%</div>
+        <div class="kpi-sub">interactions &eacute;valu&eacute;es</div>
+        <div class="kpi-sub mt-1"><b>__FB_ENGAGE_RATED__</b> / __FB_ENGAGE_TOTAL__</div>
+        <div class="progress mt-2" style="height:6px;">
+          <div class="progress-bar" style="width:__FB_ENGAGE_PCT__%; background:#6f42c1;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-9">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title">Conversations par jour &mdash; 30 derniers jours</div>
+          <canvas id="chart-usage-daily" height="90"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title">Distribution horaire (UTC)</div>
+          <canvas id="chart-hourly" height="120"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title">Esp&egrave;ces les plus recherch&eacute;es via PawBuddy</div>
+          <canvas id="chart-species" height="120"></canvas>
         </div>
       </div>
     </div>
@@ -560,6 +686,120 @@ _ADMIN_TEMPLATE = """<!DOCTYPE html>
 
   </div><!-- /tab-feedback -->
 
+  <!-- ══ Onglet Catalogue ══════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade" id="tab-cleanup">
+
+    <!-- Statut catalogue -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="section-title">&#128062; Statut du catalogue</div>
+            <div class="d-flex justify-content-between align-items-baseline mb-1">
+              <span class="small fw-semibold">Animaux total</span>
+              <span class="small text-muted">__DB_TOTAL__</span>
+            </div>
+            <div class="mb-3">
+              <div class="d-flex justify-content-between mb-1">
+                <small>Descriptions reecrites</small>
+                <small><b>__DB_REWRITTEN__</b> / __DB_TOTAL__ &nbsp;(__DB_REWRITTEN_PCT__%)</small>
+              </div>
+              <div class="progress" style="height:8px;">
+                <div class="progress-bar __DB_REWRITTEN_COLOR__" style="width:__DB_REWRITTEN_PCT__%"></div>
+              </div>
+            </div>
+            <div class="mb-2">
+              <div class="d-flex justify-content-between mb-1">
+                <small>Embeddings calcules</small>
+                <small><b>__DB_EMBEDDED__</b> / __DB_TOTAL__ &nbsp;(__DB_EMBEDDED_PCT__%)</small>
+              </div>
+              <div class="progress" style="height:8px;">
+                <div class="progress-bar __DB_EMBEDDED_COLOR__" style="width:__DB_EMBEDDED_PCT__%"></div>
+              </div>
+            </div>
+            <hr class="my-3">
+            <div class="small text-muted">
+              <span class="me-3">&#128464; <b>__DB_REWRITTEN__</b> fiches avec description LLM</span><br>
+              <span>&#128200; <b>__DB_NOT_REWRITTEN__</b> fiches restantes a traiter</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="section-title">&#128465; Nettoyage automatique</div>
+            <div class="row g-2">
+              <div class="col-6">
+                <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                  <div class="kpi-label">Runs totaux</div>
+                  <div class="kpi-value" style="color:#6f42c1;">__CLEANUP_TOTAL_RUNS__</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                  <div class="kpi-label">Supprimes</div>
+                  <div class="kpi-value text-danger">__CLEANUP_TOTAL_REMOVED__</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                  <div class="kpi-label">URLs verifiees</div>
+                  <div class="kpi-value text-primary">__CLEANUP_TOTAL_CHECKED__</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                  <div class="kpi-label">Dernier run</div>
+                  <div class="kpi-value text-success" style="font-size:1.1rem;">__CLEANUP_LAST_RUN__</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Par source -->
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <div class="section-title">Bilan par source</div>
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead class="table-light">
+                  <tr><th>Source</th><th>Runs</th><th>URLs v&eacute;rifi&eacute;es</th><th>Supprim&eacute;s</th><th>Taux retrait</th></tr>
+                </thead>
+                <tbody>__CLEANUP_TBODY_SOURCE__</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Historique des runs -->
+    <div class="row g-3 mb-5">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body pb-0">
+            <div class="section-title">Historique des 50 derniers runs</div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light">
+                <tr><th>Date</th><th>Source</th><th>V&eacute;rifi&eacute;s</th><th>Supprim&eacute;s</th><th>Animaux retir&eacute;s</th></tr>
+              </thead>
+              <tbody>__CLEANUP_TBODY_RUNS__</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-cleanup -->
+
   </div><!-- /tab-content -->
 
 </div>
@@ -615,6 +855,74 @@ if (TOP_TOOLS.length > 0) {
         backgroundColor: [
           '#0d6efd','#6f42c1','#198754','#fd7e14','#dc3545','#20c997','#0dcaf0','#6c757d'
         ],
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } },
+    },
+  });
+}
+
+const USAGE_DAILY  = __USAGE_DAILY_JSON__;
+const USAGE_HOURLY = __USAGE_HOURLY_JSON__;
+const SPECIES_DATA = __SPECIES_JSON__;
+
+// Conversations par jour
+new Chart(document.getElementById('chart-usage-daily'), {
+  type: 'bar',
+  data: {
+    labels: USAGE_DAILY.map(d => d.date),
+    datasets: [{
+      label: 'Conversations',
+      data: USAGE_DAILY.map(d => d.calls),
+      backgroundColor: 'rgba(111,66,193,.55)',
+      borderColor: '#6f42c1',
+      borderWidth: 1,
+      borderRadius: 3,
+    }],
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+  },
+});
+
+// Distribution horaire
+const HOURS    = Array.from({length: 24}, (_, i) => i);
+const HOUR_MAP = Object.fromEntries(USAGE_HOURLY.map(h => [h.hour, h.calls]));
+new Chart(document.getElementById('chart-hourly'), {
+  type: 'bar',
+  data: {
+    labels: HOURS.map(h => h + 'h'),
+    datasets: [{
+      label: 'Appels',
+      data: HOURS.map(h => HOUR_MAP[h] || 0),
+      backgroundColor: 'rgba(13,110,253,.55)',
+      borderColor: '#0d6efd',
+      borderWidth: 1,
+      borderRadius: 2,
+    }],
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+  },
+});
+
+// Espèces les plus recherchées
+const SP_COLORS = {'chien':'#fd7e14','chat':'#20c997','lapin':'#6f42c1','non précisée':'#6c757d'};
+if (SPECIES_DATA.length > 0) {
+  new Chart(document.getElementById('chart-species'), {
+    type: 'bar',
+    data: {
+      labels: SPECIES_DATA.map(s => s.species),
+      datasets: [{
+        label: 'Recherches',
+        data: SPECIES_DATA.map(s => s.cnt),
+        backgroundColor: SPECIES_DATA.map(s => SP_COLORS[s.species] || '#0d6efd'),
         borderRadius: 4,
       }],
     },
@@ -727,7 +1035,7 @@ def _render(stats: dict, token: str) -> str:
         feedback_cell = ('&#128077;' if fb == "positive"
                          else '&#128078;' if fb == "negative"
                          else '<span class="text-muted">—</span>')
-        dt = r["created_at"][:16].replace("T", " ") if r["created_at"] else "—"
+        dt = r["created_at"][:19].replace("T", " ") if r["created_at"] else "—"
         model_short = r["model_id"].split(".")[-1] if "." in r["model_id"] else r["model_id"]
         trace_rows += (
             f'<tr><td class="text-nowrap">{dt}</td>'
@@ -758,7 +1066,7 @@ def _render(stats: dict, token: str) -> str:
         label   = "Positif" if is_pos else "Negatif"
         badge   = "success" if is_pos else "danger"
         tools   = ", ".join(tc["name"] for tc in r["tool_calls"]) if r["tool_calls"] else "—"
-        dt      = r["created_at"][:16].replace("T", " ") if r["created_at"] else "—"
+        dt      = r["created_at"][:19].replace("T", " ") if r["created_at"] else "—"
         q_text   = r["user_message"][:200] + ("…" if len(r["user_message"]) > 200 else "")
         a_short  = r["assistant_response"][:300] + ("…" if len(r["assistant_response"]) > 300 else "")
         a_full   = r["assistant_response"].replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
@@ -790,6 +1098,55 @@ def _render(stats: dict, token: str) -> str:
             '</div>'
             '</div>\n'
         )
+
+    cl = stats["cleanup"]
+
+    # Nettoyage — tableau par source
+    cleanup_tbody_source = ""
+    for s in cl["by_source"]:
+        rate = round(s["removed"] / s["checked"] * 100, 1) if s["checked"] else 0.0
+        cleanup_tbody_source += (
+            "<tr>"
+            "<td><span class='badge bg-secondary'>" + s["source"] + "</span></td>"
+            "<td>" + str(s["runs"]) + "</td>"
+            "<td>" + str(s["checked"]) + "</td>"
+            "<td><b class='text-danger'>" + str(s["removed"]) + "</b></td>"
+            "<td>" + str(rate) + "%</td>"
+            "</tr>"
+        )
+    if not cleanup_tbody_source:
+        cleanup_tbody_source = "<tr><td colspan='5' class='text-center text-muted py-3'>Aucun run de nettoyage pour l'instant.</td></tr>"
+
+    # Nettoyage — historique runs
+    cleanup_tbody_runs = ""
+    for r in cl["recent_runs"]:
+        dt = r["run_at"][:16].replace("T", " ") if r["run_at"] else "—"
+        removed_badge = (
+            "<span class='badge bg-danger'>" + str(r["removed"]) + "</span>"
+            if r["removed"] > 0
+            else "<span class='badge bg-success'>0</span>"
+        )
+        names_html = ""
+        if r["removed_names"]:
+            names_html = ", ".join(r["removed_names"][:5])
+            if len(r["removed_names"]) > 5:
+                names_html += " <span class='text-muted'>+&nbsp;" + str(len(r["removed_names"]) - 5) + " autres</span>"
+        else:
+            names_html = "<span class='text-muted'>—</span>"
+        cleanup_tbody_runs += (
+            "<tr>"
+            "<td class='text-nowrap'>" + dt + "</td>"
+            "<td><span class='badge bg-secondary'>" + r["source"] + "</span></td>"
+            "<td>" + str(r["checked"]) + "</td>"
+            "<td>" + removed_badge + "</td>"
+            "<td><small>" + names_html + "</small></td>"
+            "</tr>"
+        )
+    if not cleanup_tbody_runs:
+        cleanup_tbody_runs = "<tr><td colspan='5' class='text-center text-muted py-3'>Aucun run encore.</td></tr>"
+
+    cleanup_last = cl["last_run_at"][:10] if cl["last_run_at"] else "—"
+    badge_cleanup_class = "bg-danger" if cl["total_removed"] > 0 else "bg-secondary"
 
     html = _ADMIN_TEMPLATE
     html = html.replace("__TOKEN__",              token)
@@ -830,10 +1187,24 @@ def _render(stats: dict, token: str) -> str:
     html = html.replace("__CACHE_ACTIVE_HITS__",  str(c["active_hits"]))
     html = html.replace("__TBODY_FEATURES__",     feat_rows)
     html = html.replace("__TBODY_TRACES__",       trace_rows)
-    html = html.replace("__DAILY_JSON__",         json.dumps(stats["daily"]))
-    html = html.replace("__FEATS_JSON__",         json.dumps(stats["by_feature"]))
-    html = html.replace("__TOP_TOOLS_JSON__",     json.dumps(stats["top_tools"]))
-    html = html.replace("__CHART_TOOLS_HEIGHT__", str(tools_height))
+    html = html.replace("__DAILY_JSON__",             json.dumps(stats["daily"]))
+    html = html.replace("__FEATS_JSON__",             json.dumps(stats["by_feature"]))
+    html = html.replace("__TOP_TOOLS_JSON__",         json.dumps(stats["top_tools"]))
+    html = html.replace("__CHART_TOOLS_HEIGHT__",     str(tools_height))
+    html = html.replace("__CLEANUP_TOTAL_RUNS__",     str(cl["total_runs"]))
+    html = html.replace("__CLEANUP_TOTAL_REMOVED__",  str(cl["total_removed"]))
+    html = html.replace("__CLEANUP_TOTAL_CHECKED__",  str(cl["total_checked"]))
+    html = html.replace("__CLEANUP_LAST_RUN__",       cleanup_last)
+    html = html.replace("__BADGE_CLEANUP_CLASS__",    badge_cleanup_class)
+    html = html.replace("__CLEANUP_TBODY_SOURCE__",   cleanup_tbody_source)
+    html = html.replace("__CLEANUP_TBODY_RUNS__",     cleanup_tbody_runs)
+    fe = stats["feedback_engage"]
+    html = html.replace("__FB_ENGAGE_PCT__",          str(fe["pct"]))
+    html = html.replace("__FB_ENGAGE_RATED__",        str(fe["rated"]))
+    html = html.replace("__FB_ENGAGE_TOTAL__",        str(fe["total"]))
+    html = html.replace("__USAGE_DAILY_JSON__",       json.dumps(stats["usage_daily"]))
+    html = html.replace("__USAGE_HOURLY_JSON__",      json.dumps(stats["usage_hourly"]))
+    html = html.replace("__SPECIES_JSON__",           json.dumps(stats["species_searched"]))
     return html
 
 

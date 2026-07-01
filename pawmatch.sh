@@ -17,6 +17,44 @@ case "$1" in
 
   # ── Infra ──────────────────────────────────────────────────────────────────
 
+  first_init)
+    echo ""
+    echo -e "${BOLD}${CYAN}╔══════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${BOLD}${CYAN}║          PawMatch — Initialisation complète              ║${RESET}"
+    echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    info "[1/7] Build et démarrage des services (postgres + api + front)..."
+    docker compose up --build -d || { warn "Échec du build ou du démarrage !"; exit 1; }
+
+    info "[2/7] Seeding base de connaissances PawBuddy..."
+    docker compose --profile seeder run --rm seeder
+
+    info "[3/7] Embeddings base de connaissances..."
+    docker compose --profile embedder run --rm embedder
+
+    info "[4/7] Scraping initial (~1 page par source)..."
+    MAX_PAGES=1 docker compose --profile scraper run --build --rm scraper-laspa
+    MAX_PAGES=1 docker compose --profile scraper run --build --rm scraper-sc
+
+    info "[5/7] Embeddings animaux (recherche par similarité)..."
+    docker compose --profile embedder run --rm embedder
+
+    info "[6/7] Géocodage des refuges (carte interactive)..."
+    docker compose --profile refuge-seeder run --build --rm refuge-seeder
+
+    info "[7/7] Réécriture des descriptions via Bedrock (limité à 10)..."
+    REWRITE_LIMIT=10 docker compose --profile rewriter run --rm rewriter
+
+    echo ""
+    echo -e "${BOLD}${GREEN}╔══════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${BOLD}${GREEN}║  Initialisation terminée ! L'application est prête.     ║${RESET}"
+    echo -e "${BOLD}${GREEN}╠══════════════════════════════════════════════════════════╣${RESET}"
+    echo -e "${BOLD}${GREEN}║  Frontend  :  http://localhost:3000                      ║${RESET}"
+    echo -e "${BOLD}${GREEN}║  API docs  :  http://localhost:8000/docs                 ║${RESET}"
+    echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    ;;
+
   setup)
     info "Première installation — build + démarrage + seed + embeddings"
     docker compose up --build -d
@@ -77,16 +115,16 @@ case "$1" in
 
     info "Scraping La SPA..."
     if [ -n "$LIMIT" ]; then
-      MAX_PAGES=$PAGES_SPA docker compose --profile scraper run --rm scraper-laspa
+      MAX_PAGES=$PAGES_SPA docker compose --profile scraper run --build --rm scraper-laspa
     else
-      docker compose --profile scraper run --rm scraper-laspa
+      docker compose --profile scraper run --build --rm scraper-laspa
     fi
 
     info "Scraping Seconde Chance..."
     if [ -n "$LIMIT" ]; then
-      MAX_PAGES=$PAGES_SC docker compose --profile scraper run --rm scraper-sc
+      MAX_PAGES=$PAGES_SC docker compose --profile scraper run --build --rm scraper-sc
     else
-      docker compose --profile scraper run --rm scraper-sc
+      docker compose --profile scraper run --build --rm scraper-sc
     fi
 
     info "Calcul des embeddings (nouveaux animaux uniquement)..."
@@ -95,6 +133,8 @@ case "$1" in
     docker compose --profile refuge-seeder run --build --rm refuge-seeder
     info "Réécriture des descriptions (nouveaux animaux uniquement)..."
     docker compose --profile rewriter run --rm rewriter
+    info "Nettoyage des animaux retirés des sources..."
+    docker compose --profile cleanup run --build --rm cleaner
     ok "Pipeline terminé"
     ;;
 
@@ -108,6 +148,12 @@ case "$1" in
       docker compose --profile rewriter run --rm rewriter
     fi
     ok "Réécriture terminée"
+    ;;
+
+  cleanup)
+    info "Validation des URLs et suppression des animaux retirés..."
+    docker compose --profile cleanup run --build --rm cleaner
+    ok "Nettoyage terminé"
     ;;
 
   knowledge)
@@ -129,6 +175,8 @@ case "$1" in
     ok "Enrichissement terminé"
     ;;
 
+
+
   # ── Monitoring ─────────────────────────────────────────────────────────────
 
   logs)
@@ -147,7 +195,9 @@ case "$1" in
     echo -e "${BOLD}Usage :${RESET} bash pawmatch.sh <commande> [options]"
     echo ""
     echo -e "${BOLD}${CYAN}── INFRA ───────────────────────────────────────────────────${RESET}"
-    echo -e "  ${BOLD}setup${RESET}      Première installation (build + seed + embeddings)"
+    echo -e "  ${BOLD}first_init${RESET} ${GREEN}★ Tout-en-un depuis zéro${RESET} : build + seed + scraping + embeddings"
+    echo -e "             ${DIM}(idéal première installation / machine vierge / démo)${RESET}"
+    echo -e "  ${BOLD}setup${RESET}      Première installation (build + seed + embeddings, sans scraping)"
     echo -e "  ${BOLD}start${RESET}      Démarrer le stack"
     echo -e "  ${BOLD}stop${RESET}       Arrêter le stack"
     echo -e "  ${BOLD}restart${RESET}    Arrêter puis redémarrer"
@@ -161,12 +211,14 @@ case "$1" in
     echo -e "  ${BOLD}knowledge${RESET}  Mettre à jour la base de connaissances du chatbot"
     echo -e "  ${BOLD}refuges${RESET}    Géocoder les refuges (carte)"
     echo -e "  ${BOLD}enrich${RESET}     Enrichir les races via le classifieur DL ${DIM}(local uniquement)${RESET}"
+  echo -e "  ${BOLD}cleanup${RESET}    Supprimer les animaux retirés des sites sources"
     echo ""
     echo -e "${BOLD}${CYAN}── MONITORING ──────────────────────────────────────────────${RESET}"
     echo -e "  ${BOLD}logs${RESET}       Logs en direct (Ctrl+C pour quitter)"
     echo -e "  ${BOLD}status${RESET}     État des conteneurs"
     echo ""
     echo -e "${DIM}Exemples :${RESET}"
+    echo -e "  ${DIM}bash pawmatch.sh first_init${RESET}   # ${GREEN}★ première fois sur une machine vierge${RESET}"
     echo -e "  ${DIM}bash pawmatch.sh deploy${RESET}       # après un git pull"
     echo -e "  ${DIM}bash pawmatch.sh rewrite 50${RESET}   # réécrire 50 descriptions"
     echo -e "  ${DIM}bash pawmatch.sh data${RESET}          # pipeline complet (scraping + tout)"

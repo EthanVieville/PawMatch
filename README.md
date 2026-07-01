@@ -55,13 +55,15 @@ bash pawmatch.sh <commande>
 
 | | Commande | Description |
 |---|---|---|
-| **INFRA** | `setup` | Première installation — build, démarrage, seed, embeddings |
+| **INFRA** | `first_init` | ★ **Tout-en-un depuis zéro** — build + seed + scraping + embeddings + refuges + rewrite. Idéal pour une première installation ou une démo. |
+| | `setup` | Première installation sans scraping — build, démarrage, seed, embeddings |
 | | `start` | Démarrer le stack |
 | | `stop` | Arrêter le stack |
 | | `restart` | Arrêter puis redémarrer |
 | | `deploy` | Rebuild après un `git pull` |
 | | `reset` | ⚠️ Tout effacer, base de données comprise |
-| **DONNÉES** | `data [N]` | Pipeline complet — scraping → embeddings → refuges → rewrite LLM. `N` = limite d'animaux par source (ex: `data 150`) |
+| **DONNÉES** | `data [N]` | Pipeline complet — scraping → embeddings → refuges → rewrite → nettoyage. `N` = limite d'animaux par source (ex: `data 150`) |
+| | `cleanup` | Valider les URLs des animaux et supprimer les annonces retirées des sources |
 | | `rewrite [N]` | Réécrire les descriptions via Bedrock. `N` = limite optionnelle |
 | | `knowledge` | Mettre à jour la base de connaissances du chatbot |
 | | `refuges` | Géocoder les refuges (carte) |
@@ -70,11 +72,12 @@ bash pawmatch.sh <commande>
 | | `status` | État des conteneurs |
 
 ```bash
-bash pawmatch.sh setup          # première fois
+bash pawmatch.sh first_init     # ★ première fois sur une machine vierge / démo
 bash pawmatch.sh deploy         # après un git pull
 bash pawmatch.sh data           # pipeline complet
 bash pawmatch.sh data 150       # ~150 animaux par source
 bash pawmatch.sh rewrite 50     # réécrire max 50 descriptions
+bash pawmatch.sh cleanup        # supprimer les annonces expirées
 ```
 
 URLs locales :
@@ -83,15 +86,15 @@ URLs locales :
 |---|---|
 | Site web | http://localhost:3000 |
 | API + Swagger | http://localhost:8000/docs |
-| Dashboard LLMOps | http://localhost:8000/admin?token=`<ADMIN_TOKEN>` |
+| Dashboard Admin | http://localhost:8000/admin?token=`<ADMIN_TOKEN>` |
 
 ---
 
-## LLMOps
+## Dashboard Administration
 
-Toutes les interactions LLM sont tracées en base (`llm_traces`) avec tokens, coût, latence et outils utilisés. Un dashboard admin regroupe les métriques.
+Toutes les interactions LLM sont tracées en base (`llm_traces`) avec tokens, coût, latence et outils utilisés. Le dashboard d'administration regroupe les métriques sur 3 onglets.
 
-### Dashboard
+### Accès
 
 ```bash
 # En local
@@ -102,7 +105,17 @@ ssh -L 8001:localhost:8000 ec2-user@<ip-ec2>
 # → http://localhost:8001/admin?token=<ADMIN_TOKEN>
 ```
 
-Métriques disponibles : coût total, projection mensuelle, taux d'erreur, latences p50/p90/p99, taux de cache hit, économies estimées, top outils, répartition par feature, 100 dernières traces.
+**Onglet Monitoring IA** — métriques LLM :
+- Coût total, projection mensuelle, taux d'erreur, latences p50/p90/p99
+- Taux de cache sémantique, économies estimées
+- Top outils appelés, répartition par feature
+- Conversations par jour (30j), distribution horaire des usages
+- Espèces les plus recherchées via PawBuddy, taux d'engagement feedback
+- 100 dernières traces
+
+**Onglet Feedback** — toutes les réponses notées (👍/👎) avec filtre par type et source
+
+**Onglet Catalogue** — état du catalogue animaux (embeddings, descriptions réécrites) et historique des runs de nettoyage automatique
 
 ### Cache sémantique
 
@@ -144,8 +157,9 @@ PostgreSQL 16 + pgvector. Les données survivent aux redémarrages via le volume
 | `animal_images` | Images (relation 1-N avec `animals`) |
 | `refuges` | Coordonnées GPS géocodées via Nominatim |
 | `knowledge_chunks` | Base de connaissances pour le RAG du chatbot |
-| `llm_traces` | Trace de chaque appel LLM (tokens, coût, latence, outils) |
+| `llm_traces` | Trace de chaque appel LLM (tokens, coût, latence, outils, feedback) |
 | `llm_cache` | Cache sémantique des réponses du chatbot |
+| `cleanup_runs` | Historique des runs de nettoyage — URLs vérifiées et annonces supprimées |
 
 ```bash
 # Inspecter la base
@@ -173,7 +187,7 @@ SELECT feature, count(*), round(sum(cost_usd)::numeric, 5) FROM llm_traces GROUP
 | `POST` | `/animals` | Créer une annonce particulier (prédit la race via DL) |
 | `POST` | `/predict-breed` | Prédiction de race depuis une image base64 |
 | `POST` | `/chat` | Chatbot PawBuddy — streaming SSE |
-| `GET` | `/admin` | Dashboard LLMOps *(token requis)* |
+| `GET` | `/admin` | Dashboard Administration *(token requis)* |
 
 ---
 

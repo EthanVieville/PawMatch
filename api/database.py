@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime, timezone
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -127,7 +128,18 @@ class LLMTrace(Base):
     feedback = Column(String, nullable=True)       # "positive" | "negative" | null
     user_message = Column(Text, nullable=True)
     assistant_response = Column(Text, nullable=True)
-    created_at = Column(TIMESTAMP, server_default="NOW()")
+    created_at = Column(TIMESTAMP, default=lambda: datetime.now(timezone.utc))
+
+
+class CleanupRun(Base):
+    __tablename__ = "cleanup_runs"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_at = Column(TIMESTAMP, server_default="NOW()")
+    source = Column(String, nullable=False)
+    animals_checked = Column(Integer, nullable=False, default=0)
+    animals_removed = Column(Integer, nullable=False, default=0)
+    removed_names = Column(ARRAY(String), default=[])
 
 
 def init_db():
